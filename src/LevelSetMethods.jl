@@ -2,16 +2,20 @@ module LevelSetMethods
 
 using LinearAlgebra
 using StaticArrays
+using RecipesBase
 
 export 
     CartesianGrid, 
     meshsize,
     upwind,
-    evolve!
+    evolve!,
+    SVector,
+    MeshField,
+    LevelSet,
+    AdvectionTerm
     
 include("meshes.jl")
-include("levelsets.jl")
-# include("derivatives.jl")
-# include("timestepping.jl")
+include("meshfield.jl")
+include("levelsetterms.jl")
 
 end # module
