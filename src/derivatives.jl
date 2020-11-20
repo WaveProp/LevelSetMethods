@@ -40,4 +40,3 @@ function setbc!(ϕ,bctype)
     end    
     return ϕ
 end    
-

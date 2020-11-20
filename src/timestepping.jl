@@ -7,3 +7,6 @@ function evolve!(ϕⁿ⁺¹,ϕⁿ,𝐮,grid,Δt)
     return ϕⁿ⁺¹
 end
 
+evolve(ϕⁿ,𝐮,grid,Δt) = evolve!(similar(ϕⁿ),ϕⁿ,𝐮,grid,Δt)
+
+
