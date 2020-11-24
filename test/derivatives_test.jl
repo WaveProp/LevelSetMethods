@@ -11,11 +11,11 @@ using LevelSetMethods: D⁺, D⁻, D⁰, D2⁰,D2
     grid = CartesianGrid(x,y)
     h    = meshsize(grid)
     ϕ    = LevelSet(grid) do (x,y)
-        1 - x^2 - y^2
+        x^2 + y^2 - 1
     end    
     I  = CartesianIndex(9,7)
     ∇ϕ   = MeshField(grid) do (x,y)
-        SVector(-2x,-2y)
+        SVector(2x,2y)
     end
     # first derivative    
     for op in (D⁺,D⁻,D⁰)
@@ -25,8 +25,8 @@ using LevelSetMethods: D⁺, D⁻, D⁰, D2⁰,D2
     end
     # second derivative, same direction
     for dir in 1:2
-        @test abs( -2 - D2⁰(ϕ,I,dir)) < 5*h[dir]
-        @test abs( -2 - D2(ϕ,I,(dir,dir))) < 5*h[dir]
+        @test abs( 2 - D2⁰(ϕ,I,dir)) < 5*h[dir]
+        @test abs( 2 - D2(ϕ,I,(dir,dir))) < 5*h[dir]
     end
     # second derivative, different directions
     for op in (D2,)

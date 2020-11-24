@@ -2,13 +2,13 @@ using Test
 using LevelSetMethods
 
 @testset "Basic ops" begin
-    hx,hy = 0.1, 0.2
-    x = collect(-1:hx:1)
-    y = collect(0:hy:3)
+    nx,ny = 100,50
+    x     = LinRange(-1,1,nx)
+    y     = LinRange(0,3,ny)
     grid = CartesianGrid(x,y)
     @test size(grid) === (length(x), length(y))
-    @test meshsize(grid)[1] ≈ hx
-    @test meshsize(grid)[2] ≈ hy
+    @test meshsize(grid)[1] ≈ step(x)
+    @test meshsize(grid)[2] ≈ step(y)
     @test grid[6,2] == (x[6],y[2])
     @test length(CartesianIndices(grid)) == length(x)*length(y)
 end

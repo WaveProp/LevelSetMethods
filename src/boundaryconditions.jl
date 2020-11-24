@@ -66,7 +66,7 @@ function applybc!(mf,bc::PeriodicBC{P},dir) where {P}
     @assert mesh(mf) isa CartesianGrid "boundary condition $(typeof(bc)) on $(typeof(mesh(mf))) not supported"
     ϕ       = values(mf)
     I⁻r,I⁺r = _index_read(mf,bc,dir)
-    I⁻w,I⁺w = _index_read(mf,bc,dir)
+    I⁻w,I⁺w = _index_write(mf,bc,dir)
     @views copy!(ϕ[I⁻w],ϕ[I⁺r])
     @views copy!(ϕ[I⁺w],ϕ[I⁻r])
     return mf
@@ -80,10 +80,14 @@ A homogeneours Neumann boundary condition with `P` nodes.
 # TODO: what should this do for `P>1`?
 """
 struct NeumannBC{N}  <: BoundaryCondition end
+NeumannBC(n::Int) = NeumannBC{n}()
+
+num_ghost_points(bc::NeumannBC{N}) where {N} = N
 
 ## Helper functions
 
-function _index_write(mf,::PeriodicBC{P},dir) where {P}
+function _index_write(mf,bc::BoundaryCondition,dir)
+    P = num_ghost_points(bc)    
     sz = size(mf)
     N  = length(sz)
     Il = ntuple(N) do dim
@@ -103,7 +107,8 @@ function _index_write(mf,::PeriodicBC{P},dir) where {P}
     return CartesianIndices(Il), CartesianIndices(Ir)
 end    
 
-function _index_read(mf,::PeriodicBC{P},dir) where {P}
+function _index_read(mf,bc::BoundaryCondition,dir)
+    P  = num_ghost_points(bc)    
     sz = size(mf)
     N  = length(sz)
     Il = ntuple(N) do dim
@@ -122,6 +127,3 @@ function _index_read(mf,::PeriodicBC{P},dir) where {P}
     end    
     return CartesianIndices(Il), CartesianIndices(Ir)
 end    
-
-
-

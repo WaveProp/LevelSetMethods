@@ -7,15 +7,19 @@ using RecipesBase
 export 
     CartesianGrid, 
     meshsize,
-    upwind,
-    evolve!,
     SVector,
     MeshField,
     LevelSet,
-    AdvectionTerm
+    PeriodicBC,
+    AdvectionTerm,
+    CurvatureTerm,
+    compute_terms
     
 include("meshes.jl")
+include("boundaryconditions.jl")
 include("meshfield.jl")
+include("derivatives.jl")
 include("levelsetterms.jl")
+include("timestepping.jl")
 
 end # module
