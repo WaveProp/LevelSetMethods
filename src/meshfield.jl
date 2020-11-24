@@ -8,24 +8,20 @@ struct MeshField{V,M}
     mesh::M
 end
 
-"""
-    LevelSet
-
-Alias for [`MeshField`](@ref).
-"""
-const LevelSet{V,M} = MeshField{V,M}
+# getters
+mesh(ϕ::MeshField) = ϕ.mesh
+Base.values(ϕ::MeshField) = ϕ.vals
+grid1d(mf::MeshField,args...) = grid1d(mesh(mf),args...)
 
 function MeshField(f::Function,m)
     vals = map(f,m)
     MeshField(vals,m)
-end    
-
-# getters
-mesh(ϕ::MeshField) = ϕ.mesh
-Base.values(ϕ::MeshField) = ϕ.vals
+end
 
 # geometric dimension
 dimension(f::MeshField) = dimension(mesh(f))
+
+meshsize(f::MeshField,args...) = meshsize(mesh(f),args...)
 
 # overload base methods for convenience
 Base.getindex(ϕ::MeshField,I...) = getindex(values(ϕ),I...)
@@ -34,39 +30,31 @@ Base.size(ϕ::MeshField) = size(values(ϕ))
 Base.eltype(ϕ::MeshField) = eltype(values(ϕ))
 Base.zero(ϕ::MeshField) = MeshField(zero(values(ϕ)),mesh(ϕ))
 
-# apply b.c. on a MeshField by rewritting the "border nodes"
-function applybc!(mf::MeshField,bctype)
-    # periodic, only one layer of ghost nodes   
-    ϕ = values(mf) 
-    if bctype == :periodic1 
-        # @. ϕ[1,:]   = ϕ[end-1,:]
-        @views copy!(ϕ[1,:],ϕ[end-1,:])
-        @views copy!(ϕ[end,:],ϕ[2,:])
-        @views copy!(ϕ[:,1],ϕ[:,end-1])
-        @views copy!(ϕ[:,end],ϕ[:,2])
-    elseif bctype == :neumann1
-        @views ϕ[1,:]   = ϕ[2,:]
-        ϕ[end,:] = ϕ[end-1,:]
-        ϕ[:,1]   = ϕ[:,2]
-        ϕ[:,end] = ϕ[:,end-1]
-    else 
-        error("uknown boundary condition $bctype")    
-    end    
-    return ϕ
-end    
+"""
+    LevelSet
 
-# some helper functions
-function _increment_index(I::CartesianIndex,dim::Integer)
-    N = length(I)    
-    @assert 1 ≤ dim ≤ length(I)
-    return I + CartesianIndex(ntuple(i-> i==dim,N))
-end    
+Alias for [`MeshField`](@ref).
+"""
+const LevelSet{V,M} = MeshField{V,M}
 
-function _decrement_index(I::CartesianIndex,dim::Integer)
-    N = length(I)    
-    @assert 1 ≤ dim ≤ length(I)
-    return I + CartesianIndex(ntuple(i-> -(i==dim),N))
-end    
+# function Contour.contour(ϕ::LevelSet)
+#     N = dimension(ϕ)
+#     if N == 2
+#         x = xgrid(ϕ.mesh)    
+#         y = ygrid(ϕ.mesh)
+#         c = Contour.contour(x,y,transpose(values(ϕ)),0)
+#         pts = SVector{2,Float64}[]
+#         for l in lines(c)
+#             xs,ys = coordinates(l)
+#             for i in 1:length(xs)
+#                 push!(pts,SVector(xs[i],ys[i]))    
+#             end    
+#         end
+#         return pts
+#     else
+#         notimplemented()        
+#     end
+# end    
 
 # recipes for Plots
 @recipe function f(ϕ::MeshField)
@@ -74,9 +62,16 @@ end
     if N == 2 # 2d contour plot
         seriestype := :contour
         levels --> [0,]
+        aspect_ratio --> :equal
+        colorbar --> false
+        seriescolor --> :black
         m = mesh(ϕ)    
-        return xgrid(m),ygrid(m),values(ϕ)
+        # Note: the values of ϕ need be transposed because contour expects the
+        # matrix to have rows representing the x values and columns expecting
+        # the y value. 
+        return xgrid(m),ygrid(m),transpose(values(ϕ))
     else
         notimplemented()
     end        
 end    
+
