@@ -1,5 +1,5 @@
 """
-    abstract type BoundaryCondition{N}
+    abstract type BoundaryCondition
     
 Singleton types used in [`applybc!`](@ref) for dispatch purposes.
 
@@ -7,7 +7,7 @@ Boundary conditions are imposed by a *ghost node* method, meaning that meshes
 are composed of *internal nodes*, and *ghost nodes* which sole purpose is to
 reinforce a given boundary condition.
 """
-abstract type BoundaryCondition{N} end
+abstract type BoundaryCondition end
 
 """
     num_ghost_points(bc::BoundaryCondition)
