@@ -29,6 +29,7 @@ Base.setindex!(ϕ::MeshField,vals,I...) = setindex!(values(ϕ),vals,I...)
 Base.size(ϕ::MeshField) = size(values(ϕ))
 Base.eltype(ϕ::MeshField) = eltype(values(ϕ))
 Base.zero(ϕ::MeshField) = MeshField(zero(values(ϕ)),mesh(ϕ))
+Base.similar(ϕ::MeshField) = MeshField(similar(values(ϕ)),mesh(ϕ))
 
 """
     LevelSet

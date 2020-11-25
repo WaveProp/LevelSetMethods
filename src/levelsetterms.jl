@@ -20,7 +20,7 @@ function compute_terms!(buffer::MeshField,terms::Tuple,ϕ::MeshField,bc::Boundar
     Δt = Inf
     for I in interior_indices(grid,bc)
         map(terms) do term
-            buffer = _update_term!(buffer,term,ϕ,I)    
+            _update_term!(buffer,term,ϕ,I)    
         end    
         Δt = minimum(terms) do term
             _compute_cfl(term,ϕ,I)

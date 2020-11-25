@@ -25,7 +25,7 @@ terms = (term1,)
 bc    = PeriodicBC(2)
 pgap = 1
 # integrator = ForwardEuler(cfl=0.5,buffer=similar(ϕ))
-integrator = RK2(cfl=0.5,buffer=(similar(ϕ),similar(ϕ)))
+integrator = RK2(cfl=0.5,buffers=(similar(ϕ),similar(ϕ)))
 t = 0
 anim = @animate for n ∈ 0:20
     ϕ, t = LevelSetMethods.evolve!(ϕ,integrator,terms,bc,t)
