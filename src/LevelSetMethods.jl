@@ -16,7 +16,9 @@ export
     NormalAdvectionTerm,
     compute_terms,
     add_circle!,
-    add_rectangle!
+    add_rectangle!,
+    ForwardEuler,
+    RK2
 
 include("meshes.jl")
 include("boundaryconditions.jl")

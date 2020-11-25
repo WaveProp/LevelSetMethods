@@ -14,18 +14,21 @@ these terms to the level set equation. A `buffer` can be passed for allocation
 purposes, so that `compute_terms!` is does not allocate any (dynamic) memory.
 """
 function compute_terms!(buffer::MeshField,terms::Tuple,ϕ::MeshField,bc::BoundaryCondition)
-    @assert mesh(ϕ) == mesh(buffer)
     grid = mesh(ϕ)
     # update ϕ with prescribed bc before entering the loop
     applybc!(ϕ,bc)
+    Δt = Inf
     for I in interior_indices(grid,bc)
         map(terms) do term
-            _update_term!(buffer,term,ϕ,I)    
+            buffer = _update_term!(buffer,term,ϕ,I)    
         end    
+        Δt = minimum(terms) do term
+            _compute_cfl(term,ϕ,I)
+        end            
     end   
-    return buffer     
+    return buffer,Δt     
 end    
-compute_terms(terms::Tuple,ϕ::MeshField,bc::BoundaryCondition) = compute_terms!(zero(ϕ),terms::Tuple,ϕ::MeshField,bc::BoundaryCondition)
+compute_terms(args...) = compute_terms!(zero(ϕ),args...)
 
 """
     struct AdvectionTerm{V,M} <: LevelSetTerm
@@ -55,6 +58,18 @@ function _update_term!(buffer,term::AdvectionTerm,ϕ,I)
     return buffer
 end
 
+function _compute_cfl(term::AdvectionTerm,ϕ,I)
+    𝐮 = velocity(term)[I]
+    N = dimension(ϕ)
+    # for each dimension, compute the upwind derivative and multiply by the
+    # velocity and add to buffer
+    Δt = minimum(1:N) do dim
+        Δx = meshsize(ϕ)[dim]
+        Δx/abs(𝐮[dim])
+    end
+    return Δt
+end    
+
 """
     struct CurvatureTerm{V,M} <: LevelSetTerm
 
@@ -77,6 +92,18 @@ function _update_term!(buffer,term::CurvatureTerm,ϕ,I)
     buffer[I] += b[I]*κ*sqrt(ϕ²)
     return buffer
 end
+
+function _compute_cfl(term::CurvatureTerm,ϕ,I)
+    b = coefficient(term)[I]
+    N = dimension(ϕ)
+    # for each dimension, compute the upwind derivative and multiply by the
+    # velocity and add to buffer
+    Δt = minimum(1:N) do dim
+        Δx = meshsize(ϕ)[dim]
+        (Δx)^2/(2*abs(b))
+    end
+    return Δt
+end    
 
 function curvature(ϕ::LevelSet,I)
     N = dimension(ϕ)
@@ -145,14 +172,24 @@ function _update_term!(buffer,term::NormalAdvectionTerm,ϕ,I)
     return buffer
 end
 
+function _compute_cfl(term::NormalAdvectionTerm,ϕ,I)
+    u = speed(term)
+    N = dimension(ϕ)
+    v = abs(u[I])
+    Δt = minimum(1:N) do dim
+        meshsize(ϕ)[dim]/v
+    end 
+    return Δt   
+end
+
+function _compute_cfl_old(term::NormalAdvectionTerm,ϕ)
+    mind    = minimum(meshsize(ϕ))
+    norminf = maximum(abs.(speed(term)))
+    return mind / norminf
+end
+
 @inline positive(x) = x > zero(x) ? x : zero(x)
 @inline negative(x) = x < zero(x) ? x : zero(x)
-
-function _compute_cfl(buffer,term::NormalAdvectionTerm,ϕ)
-    mind = minimum(meshsize(ϕ))
-    norminf = maximum(abs.(speed(term)))
-    return 0.5 * mind / norminf
-end
 
 # eq. (6.20-6.21)
 function g(x, y)
