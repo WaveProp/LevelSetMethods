@@ -149,19 +149,14 @@ function _compute_term(term::NormalAdvectionTerm,ϕ,I)
     u = speed(term)
     N = dimension(ϕ)
     v = u[I]
-    mA0² = 0.0
-    mB0² = 0.0
-    for dim in 1:N
+    mA0²,mB0² = sum(1:N) do dim
         h = meshsize(ϕ,dim)
-        # eq. (6.22-6.27) generalized for any dimensions
         A = D⁻(ϕ,I,dim) + 0.5 * h * limiter(D2⁻⁻(ϕ,I,dim), D2⁰(ϕ,I,dim))
         B = D⁺(ϕ,I,dim) - 0.5 * h * limiter(D2⁺⁺(ϕ,I,dim), D2⁰(ϕ,I,dim))
         if v > 0.0
-            mA0² += positive(A)^2
-            mB0² += negative(B)^2
+            SVector(positive(A)^2,negative(B)^2)
         else
-            mA0² += negative(A)^2
-            mB0² += positive(B)^2
+            SVector(negative(A)^2,positive(B)^2)
         end
     end
     ∇ = sqrt(mA0² + mB0²)
