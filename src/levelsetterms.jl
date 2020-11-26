@@ -21,9 +21,15 @@ end
 
 # generic method, loops over indices
 function _compute_cfl(term::LevelSetTerm,ϕ)
-    minimum(interior_indices(ϕ)) do I
-        _compute_cfl(term,ϕ,I)    
+    dt = Inf    
+    for I in interior_indices(ϕ)
+        cfl = _compute_cfl(term,ϕ,I)        
+        dt = min(dt,cfl)    
     end    
+    return dt
+    # minimum(interior_indices(ϕ)) do I
+    #     _compute_cfl(term,ϕ,I)    
+    # end    
 end    
 
 """
@@ -85,11 +91,11 @@ function _compute_term(term::CurvatureTerm,ϕ,I)
     b = coefficient(term)
     κ = curvature(ϕ,I)
     # compute |∇ϕ|
-    ∇ϕ = map(1:N) do dim
-        D⁰(ϕ,I,dim)
+    ϕ2 = sum(1:N) do dim
+        D⁰(ϕ,I,dim)^2
     end
     # update
-    return b[I]*κ*norm(∇ϕ,2)
+    return b[I]*κ*sqrt(ϕ2)
 end
 
 function _compute_cfl(term::CurvatureTerm,ϕ,I,dim)

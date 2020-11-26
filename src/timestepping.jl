@@ -5,17 +5,6 @@ Base.@kwdef struct ForwardEuler <: TimeIntegrator
 end
 cfl(fe::ForwardEuler) = fe.cfl
 
-# function evolve!(ϕ,feuler::ForwardEuler,terms,bc,t,Δtmax=Inf)
-#     buffer      = feuler.buffer
-#     fill!(values(buffer),0)
-#     buffer, Δtˢ = compute_terms!(buffer,terms,ϕ,bc)    
-#     α = feuler.cfl
-#     Δt = min(Δtmax,α*Δtˢ)
-#     # buffer now holds the rhs. Update ϕ in-place
-#     axpy!(-Δt,buffer.vals,ϕ.vals) # ϕ = ϕ - dt*buffer
-#     return ϕ,t+Δt
-# end    
-
 Base.@kwdef struct RK2 <: TimeIntegrator
     cfl::Float64 = 0.5 
 end

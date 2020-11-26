@@ -82,9 +82,7 @@ function _integrate!(ϕ::LevelSet,buffer::LevelSet,integrator::ForwardEuler,term
         applybc!(ϕ) 
         grid = mesh(ϕ)
         for I in interior_indices(ϕ)
-            buffer[I] = sum(terms) do term
-                _compute_term(term,ϕ,I)    
-            end
+            buffer[I] = _compute_terms(terms,ϕ,I)
             buffer[I] = ϕ[I] - Δt * buffer[I] # muladd?
         end       
         ϕ, buffer = buffer,ϕ # swap the roles, no copies
@@ -93,6 +91,12 @@ function _integrate!(ϕ::LevelSet,buffer::LevelSet,integrator::ForwardEuler,term
     end
     # @assert tc ≈ tf
     return ϕ,buffer
+end
+
+function _compute_terms(terms,ϕ,I)
+    sum(terms) do term
+        _compute_term(term,ϕ,I)    
+    end
 end
 
 # recipes for Plots
