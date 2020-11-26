@@ -93,6 +93,51 @@ function _integrate!(ϕ::LevelSet,buffer::LevelSet,integrator::ForwardEuler,term
     return ϕ,buffer
 end
 
+function _integrate!(ϕ::LevelSet,buffers,integrator::RK2,terms,tc,tf,Δt)
+    α      = cfl(integrator)
+    buffer1,buffer2 = buffers[1],buffers[2]
+    Δt_cfl = α * compute_cfl(terms,ϕ) 
+    Δt     = min(Δt,Δt_cfl)
+    while tc <= tf - eps(tc)
+        Δt  = min(Δt,tf-tc) # if needed, take a smaller time-step to exactly land on tf        
+        applybc!(ϕ) 
+        grid = mesh(ϕ)
+        for I in interior_indices(ϕ)
+            tmp = _compute_terms(terms,ϕ,I)
+            buffer1[I] = ϕ[I] - Δt * tmp # muladd?
+            buffer2[I] = ϕ[I] - 0.5*Δt * tmp # muladd?
+        end       
+        applybc!(buffer1)
+        for I in interior_indices(ϕ)
+            tmp = _compute_terms(terms,buffer1,I)
+            buffer2[I] -= 0.5*Δt * tmp
+        end       
+        ϕ,buffer1,buffer2 = buffer2,ϕ,buffer1 # swap the roles, no copies
+        tc += Δt
+        @debug tc,Δt
+    end
+    # @assert tc ≈ tf
+    return ϕ,(buffer1,buffer2)
+end
+
+# function evolve!(ϕ,integ::RK2,terms,bc,t,Δtmax=Inf)
+    #     α = integ.cfl    
+    #     buffer1,buffer2 = integ.buffers[1],integ.buffers[2]
+    #     fill!(values(buffer1),0)
+    #     fill!(values(buffer2),0)
+    #     #
+    #     buffer1, Δtˢ = compute_terms!(buffer1,terms,ϕ,bc) 
+    #     Δt = min(Δtmax,α*Δtˢ) 
+    #     axpy!(-Δt/2,buffer1.vals,ϕ.vals) # ϕ = ϕ - dt/2*buffer1
+    #     #
+    #     @. buffer1.vals = ϕ.vals + Δt * buffer1.vals   
+    #     buffer2, _   = compute_terms!(buffer2,terms,buffer1,bc)    
+    #     #    
+    #     axpy!(-Δt/2,buffer2.vals,ϕ.vals) # ϕ = ϕ - dt/2*buffer2
+    #     return ϕ,t+Δt
+    # end   
+
+
 function _compute_terms(terms,ϕ,I)
     sum(terms) do term
         _compute_term(term,ϕ,I)    
