@@ -9,24 +9,18 @@ abstract type LevelSetTerm end
     compute_terms(terms,ϕ,bc)
     compute_terms!(buffer,terms,ϕ,bc)
 
-Given a tuple `terms` containing `LevSetTerm`s, compute the contribution of all
-these terms to the level set equation. A `buffer` can be passed for allocation
-purposes, so that `compute_terms!` is does not allocate any (dynamic) memory.
+Given a tuple `terms` containing `LevelSetTerm`s, compute the contribution of all
+these terms to the level set equation. A `buffer` can be passed to allocate the output.
 """
-function compute_terms!(buffer::MeshField,terms::Tuple,ϕ::MeshField,bc::BoundaryCondition)
+function compute_terms!(buffer::MeshField,terms::Tuple,ϕ::LevelSet)
+    applybc!(ϕ) # TODO: who is actually responsible for calling this?
     grid = mesh(ϕ)
-    # update ϕ with prescribed bc before entering the loop
-    applybc!(ϕ,bc)
-    Δt = Inf
-    for I in interior_indices(grid,bc)
-        map(terms) do term
-            _update_term!(buffer,term,ϕ,I)    
-        end    
-        Δt = minimum(terms) do term
-            _compute_cfl(term,ϕ,I)
+    for I in interior_indices(ϕ)
+        buffer[I] = sum(terms) do term
+            _compute_term!(term,ϕ,I)    
         end            
     end   
-    return buffer,Δt     
+    return buffer
 end    
 compute_terms(args...) = compute_terms!(zero(ϕ),args...)
 
@@ -37,37 +31,58 @@ Level-set advection term representing  `𝐯 ⋅ ∇ϕ`.
 """
 Base.@kwdef struct AdvectionTerm{V,M} <: LevelSetTerm
     velocity::MeshField{V,M}
-    scheme::Symbol = :upwind
 end
 velocity(adv::AdvectionTerm) = adv.velocity
-boundary_condition(adv)      = adv.bc
 
-function _update_term!(buffer,term::AdvectionTerm,ϕ,I)
+function _compute_term(term::AdvectionTerm,ϕ,I,dim)
     𝐮 = velocity(term)
     N = dimension(ϕ)
-    # for each dimension, compute the upwind derivative and multiply by the
-    # velocity and add to buffer
-    for dim in 1:N
-        v = 𝐮[I][dim]
-        if v > 0
-            buffer[I] += v*D⁻(ϕ,I,dim)
-        else
-            buffer[I] += v*D⁺(ϕ,I,dim)
-        end
+    # for dimension dim, compute the upwind derivative and multiply by the
+    # velocity
+    v = 𝐮[I][dim]
+    if v > 0
+        return v*D⁻(ϕ,I,dim)
+    else
+        return v*D⁺(ϕ,I,dim)
     end
-    return buffer
 end
 
-function _compute_cfl(term::AdvectionTerm,ϕ,I)
+function _compute_term(term::AdvectionTerm,ϕ,I)
+    N = dimension(term)    
+    sum(1:N) do dim
+        _compute_term(term,ϕ,I,dim)    
+    end    
+end
+
+function _compute_cfl(term::AdvectionTerm,ϕ,I,dim)
     𝐮 = velocity(term)[I]
     N = dimension(ϕ)
     # for each dimension, compute the upwind derivative and multiply by the
     # velocity and add to buffer
-    Δt = minimum(1:N) do dim
-        Δx = meshsize(ϕ)[dim]
-        Δx/abs(𝐮[dim])
+    Δx = meshsize(ϕ)[dim]
+    return Δx/abs(𝐮[dim])
+end    
+
+function _compute_cfl(term::AdvectionTerm,ϕ,I)
+    N = dimension(term)    
+    minimum(1:N) do dim
+        _compute_cfl(term,ϕ,I,dim)    
+    end    
+end    
+
+# generic method, loops over dimensions
+function _compute_cfl(term::LevelSetTerm,ϕ::LevelSet,I)
+    N = dimension(ϕ)    
+    minimum(1:N) do dim
+        _compute_cfl(term,ϕ,I,dim)
     end
-    return Δt
+end
+
+# generic method, loops over indices
+function _compute_cfl(term::LevelSetTerm,ϕ::LevelSet)
+    minimum(interior_indices(ϕ)) do I
+        _compute_cfl(term,ϕ,I)    
+    end    
 end    
 
 """
@@ -81,28 +96,22 @@ struct CurvatureTerm{V,M} <: LevelSetTerm
 end
 coefficient(cterm::CurvatureTerm) = cterm.b
 
-function _update_term!(buffer,term::CurvatureTerm,ϕ,I)
+function _compute_term(term::CurvatureTerm,ϕ,I)
     b = coefficient(term)
-    N = dimension(ϕ)
     κ = curvature(ϕ,I)
     # compute |∇ϕ|
-    ϕ² = sum(1:N) do dim
-        D⁰(ϕ,I,dim)^2
+    ∇ϕ = map(1:N) do dim
+        D⁰(ϕ,I,dim)
     end
-    buffer[I] += b[I]*κ*sqrt(ϕ²)
+    # update
+    buffer[I] += b[I]*κ*norm(∇ϕ,2)
     return buffer
 end
 
-function _compute_cfl(term::CurvatureTerm,ϕ,I)
+function _compute_cfl(term::CurvatureTerm,ϕ,I,dim)
     b = coefficient(term)[I]
-    N = dimension(ϕ)
-    # for each dimension, compute the upwind derivative and multiply by the
-    # velocity and add to buffer
-    Δt = minimum(1:N) do dim
-        Δx = meshsize(ϕ)[dim]
-        (Δx)^2/(2*abs(b))
-    end
-    return Δt
+    Δx = meshsize(ϕ)[dim]
+    return (Δx)^2/(2*abs(b))
 end    
 
 function curvature(ϕ::LevelSet,I)
@@ -144,7 +153,7 @@ velocities you may use `AdvectionTerm` instead.
 end
 speed(adv::NormalAdvectionTerm) = adv.speed
 
-function _update_term!(buffer,term::NormalAdvectionTerm,ϕ,I)
+function _compute_term(term::NormalAdvectionTerm,ϕ,I)
     u = speed(term)
     N = dimension(ϕ)
     v = u[I]
@@ -152,11 +161,9 @@ function _update_term!(buffer,term::NormalAdvectionTerm,ϕ,I)
     mB0² = 0.0
     for dim in 1:N
         h = meshsize(ϕ,dim)
-
         # eq. (6.22-6.27) generalized for any dimensions
         A = D⁻(ϕ,I,dim) + 0.5 * h * limiter(D2⁻⁻(ϕ,I,dim), D2⁰(ϕ,I,dim))
         B = D⁺(ϕ,I,dim) - 0.5 * h * limiter(D2⁺⁺(ϕ,I,dim), D2⁰(ϕ,I,dim))
-
         if v > 0.0
             mA0² += positive(A)^2
             mB0² += negative(B)^2
@@ -165,27 +172,14 @@ function _update_term!(buffer,term::NormalAdvectionTerm,ϕ,I)
             mB0² += positive(B)^2
         end
     end
-
     ∇ = sqrt(mA0² + mB0²)
-    buffer[I] += ∇ * v
-
-    return buffer
+    return ∇ * v
 end
 
-function _compute_cfl(term::NormalAdvectionTerm,ϕ,I)
-    u = speed(term)
-    N = dimension(ϕ)
-    v = abs(u[I])
-    Δt = minimum(1:N) do dim
-        meshsize(ϕ)[dim]/v
-    end 
-    return Δt   
-end
-
-function _compute_cfl_old(term::NormalAdvectionTerm,ϕ)
-    mind    = minimum(meshsize(ϕ))
-    norminf = maximum(abs.(speed(term)))
-    return mind / norminf
+function _compute_cfl(term::NormalAdvectionTerm,ϕ,I,dim)
+    u = speed(term)[I]
+    Δx = meshsize(ϕ)[dim]
+    return Δx/abs(u) 
 end
 
 @inline positive(x) = x > zero(x) ? x : zero(x)

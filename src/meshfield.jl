@@ -44,6 +44,8 @@ const LevelSet{V,M,B<:BoundaryCondition} = MeshField{V,M,B}
 
 applybc!(ϕ::LevelSet) = applybc!(ϕ,boundary_condition(ϕ))
 
+interior_indices(ϕ::LevelSet) = interior_indices(mesh(ϕ),boundary_condition(ϕ))
+
 # helpers to add geometric shapes on the a level set
 function add_circle!(ϕ::MeshField, center, r)
     rsq = r*r
