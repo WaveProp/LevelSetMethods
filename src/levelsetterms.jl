@@ -78,7 +78,7 @@ struct CurvatureTerm{V,M} <: LevelSetTerm
 end
 coefficient(cterm::CurvatureTerm) = cterm.b
 
-Base.show(io::IO, t::CurvatureTerm) = print(io, "b*κ*|∇ϕ|")
+Base.show(io::IO, t::CurvatureTerm) = print(io, "b κ|∇ϕ|")
 
 function _compute_term(term::CurvatureTerm,ϕ,I)
     N = dimension(ϕ)    

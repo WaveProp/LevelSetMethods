@@ -22,15 +22,19 @@ end
 𝐮     = MeshField(grid) do (x,y)
     SVector(-y,x)
 end   
+b     = MeshField(grid) do (x,y)
+    -min(hx,hy)
+end   
 term1  = NormalAdvectionTerm(v)
 term2  = AdvectionTerm(𝐮)
-terms = (term1,term2)
+term3  = CurvatureTerm(b)
+terms = (term1,term2,term3)
 b = zero(ϕ)
 integrator = ForwardEuler(0.5)
 eq = LevelSetEquation(;terms,integrator,state=ϕ,t=0,buffer=b)
 
 dt = 0.01
-anim = @animate for n ∈ 0:100
+anim = @animate for n ∈ 0:80
     tf = dt*n    
     integrate!(eq,tf)    
     plot(eq,linecolor=:black)    
