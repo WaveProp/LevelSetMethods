@@ -120,6 +120,34 @@ function _integrate!(ϕ::LevelSet,buffers,integrator::RK2,terms,tc,tf,Δt)
     return ϕ,(buffer1,buffer2)
 end
 
+function _integrate!(ϕ::LevelSet,buffer::LevelSet,integrator::RKLM2,terms,tc,tf,Δt)
+    α      = cfl(integrator)
+    Δt_cfl = α * compute_cfl(terms,ϕ) 
+    Δt     = min(Δt,Δt_cfl)
+    while tc <= tf - eps(tc)
+        Δt  = min(Δt,tf-tc) # if needed, take a smaller time-step to exactly land on tf        
+        applybc!(ϕ) 
+        grid = mesh(ϕ)
+        for I in interior_indices(ϕ)
+            tmp = _compute_terms(terms,ϕ,I)
+            buffer[I] = tmp
+        end       
+        for I in interior_indices(ϕ)
+            ϕ[I] = ϕ[I] - Δt * buffer[I] # muladd?
+        end
+        applybc!(ϕ)
+        for I in interior_indices(ϕ)
+            tmp = _compute_terms(terms,ϕ,I)
+            buffer[I] = ϕ[I] - 0.5*Δt*tmp + 0.5*Δt*buffer[I]
+        end       
+        ϕ,buffer = buffer,ϕ # swap the roles, no copies
+        tc += Δt
+        @debug tc,Δt
+    end
+    # @assert tc ≈ tf
+    return ϕ,buffer
+end
+
 # function evolve!(ϕ,integ::RK2,terms,bc,t,Δtmax=Inf)
     #     α = integ.cfl    
     #     buffer1,buffer2 = integ.buffers[1],integ.buffers[2]

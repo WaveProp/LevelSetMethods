@@ -10,6 +10,11 @@ Base.@kwdef struct RK2 <: TimeIntegrator
 end
 cfl(rk2::RK2) = rk2.cfl
 
+Base.@kwdef struct RKLM2 <: TimeIntegrator
+    cfl::Float64 = 0.5 
+end
+cfl(rk2::RKLM2) = rk2.cfl
+
 # function evolve!(ϕ,integ::RK2,terms,bc,t,Δtmax=Inf)
 #     α = integ.cfl    
 #     buffer1,buffer2 = integ.buffers[1],integ.buffers[2]
