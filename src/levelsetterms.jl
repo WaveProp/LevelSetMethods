@@ -5,24 +5,26 @@ A typical term in a level-set evolution equation.
 """
 abstract type LevelSetTerm end
 
-"""
-    compute_terms(terms,ϕ,bc)
-    compute_terms!(buffer,terms,ϕ,bc)
-
-Given a tuple `terms` containing `LevelSetTerm`s, compute the contribution of all
-these terms to the level set equation. A `buffer` can be passed to allocate the output.
-"""
-function compute_terms!(buffer::MeshField,terms::Tuple,ϕ::LevelSet)
-    applybc!(ϕ) # TODO: who is actually responsible for calling this?
-    grid = mesh(ϕ)
-    for I in interior_indices(ϕ)
-        buffer[I] = sum(terms) do term
-            _compute_term!(term,ϕ,I)    
-        end            
-    end   
-    return buffer
+function compute_cfl(terms,ϕ)
+    minimum(terms) do term
+        _compute_cfl(term,ϕ)    
+    end    
 end    
-compute_terms(args...) = compute_terms!(zero(ϕ),args...)
+
+# generic method, loops over dimensions
+function _compute_cfl(term::LevelSetTerm,ϕ,I)
+    N = dimension(ϕ)    
+    minimum(1:N) do dim
+        _compute_cfl(term,ϕ,I,dim)
+    end
+end
+
+# generic method, loops over indices
+function _compute_cfl(term::LevelSetTerm,ϕ)
+    minimum(interior_indices(ϕ)) do I
+        _compute_cfl(term,ϕ,I)    
+    end    
+end    
 
 """
     struct AdvectionTerm{V,M} <: LevelSetTerm
@@ -33,6 +35,8 @@ Base.@kwdef struct AdvectionTerm{V,M} <: LevelSetTerm
     velocity::MeshField{V,M}
 end
 velocity(adv::AdvectionTerm) = adv.velocity
+
+Base.show(io::IO, t::AdvectionTerm) = print(io, "𝐮 ⋅ ∇ ϕ")
 
 function _compute_term(term::AdvectionTerm,ϕ,I,dim)
     𝐮 = velocity(term)
@@ -48,7 +52,7 @@ function _compute_term(term::AdvectionTerm,ϕ,I,dim)
 end
 
 function _compute_term(term::AdvectionTerm,ϕ,I)
-    N = dimension(term)    
+    N = dimension(ϕ)    
     sum(1:N) do dim
         _compute_term(term,ϕ,I,dim)    
     end    
@@ -63,28 +67,6 @@ function _compute_cfl(term::AdvectionTerm,ϕ,I,dim)
     return Δx/abs(𝐮[dim])
 end    
 
-function _compute_cfl(term::AdvectionTerm,ϕ,I)
-    N = dimension(term)    
-    minimum(1:N) do dim
-        _compute_cfl(term,ϕ,I,dim)    
-    end    
-end    
-
-# generic method, loops over dimensions
-function _compute_cfl(term::LevelSetTerm,ϕ::LevelSet,I)
-    N = dimension(ϕ)    
-    minimum(1:N) do dim
-        _compute_cfl(term,ϕ,I,dim)
-    end
-end
-
-# generic method, loops over indices
-function _compute_cfl(term::LevelSetTerm,ϕ::LevelSet)
-    minimum(interior_indices(ϕ)) do I
-        _compute_cfl(term,ϕ,I)    
-    end    
-end    
-
 """
     struct CurvatureTerm{V,M} <: LevelSetTerm
 
@@ -95,6 +77,8 @@ struct CurvatureTerm{V,M} <: LevelSetTerm
     b::MeshField{V,M}
 end
 coefficient(cterm::CurvatureTerm) = cterm.b
+
+Base.show(io::IO, t::CurvatureTerm) = print(io, "b*κ*|∇ϕ|")
 
 function _compute_term(term::CurvatureTerm,ϕ,I)
     b = coefficient(term)
@@ -152,6 +136,8 @@ velocities you may use `AdvectionTerm` instead.
     speed::MeshField{V,M}
 end
 speed(adv::NormalAdvectionTerm) = adv.speed
+
+Base.show(io::IO, t::NormalAdvectionTerm) = print(io, "v|∇ϕ|")
 
 function _compute_term(term::NormalAdvectionTerm,ϕ,I)
     u = speed(term)

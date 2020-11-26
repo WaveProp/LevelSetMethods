@@ -32,8 +32,8 @@ Base.getindex(ϕ::MeshField,I...) = getindex(values(ϕ),I...)
 Base.setindex!(ϕ::MeshField,vals,I...) = setindex!(values(ϕ),vals,I...)
 Base.size(ϕ::MeshField) = size(values(ϕ))
 Base.eltype(ϕ::MeshField) = eltype(values(ϕ))
-Base.zero(ϕ::MeshField) = MeshField(zero(values(ϕ)),mesh(ϕ))
-Base.similar(ϕ::MeshField) = MeshField(similar(values(ϕ)),mesh(ϕ))
+Base.zero(ϕ::MeshField) = MeshField(zero(values(ϕ)),mesh(ϕ),boundary_condition(ϕ))
+Base.similar(ϕ::MeshField) = MeshField(similar(values(ϕ)),mesh(ϕ),boundary_condition(ϕ))
 
 """
     LevelSet
@@ -41,6 +41,13 @@ Base.similar(ϕ::MeshField) = MeshField(similar(values(ϕ)),mesh(ϕ))
 Alias for [`MeshField`](@ref) with a boundary condition.
 """
 const LevelSet{V,M,B<:BoundaryCondition} = MeshField{V,M,B}
+
+function LevelSet(f::Function,m,bc::BoundaryCondition)
+    vals = map(f,m)
+    ϕ = MeshField(vals,m,bc)
+    applybc!(ϕ)
+    return ϕ
+end
 
 applybc!(ϕ::LevelSet) = applybc!(ϕ,boundary_condition(ϕ))
 
@@ -63,11 +70,11 @@ end
 @recipe function f(ϕ::MeshField)
     N = dimension(ϕ)
     if N == 2 # 2d contour plot
-        seriestype := :contour
+        seriestype --> :contour
         levels --> [0,]
         aspect_ratio --> :equal
         colorbar --> false
-        seriescolor --> :black
+        # seriescolor --> :black
         m = mesh(ϕ)
         # Note: the values of ϕ need be transposed because contour expects the
         # matrix to have rows representing the x values and columns expecting

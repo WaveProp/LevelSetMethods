@@ -18,7 +18,9 @@ export
     add_circle!,
     add_rectangle!,
     ForwardEuler,
-    RK2
+    RK2, 
+    LevelSetEquation,
+    integrate!
 
 include("meshes.jl")
 include("boundaryconditions.jl")
@@ -26,5 +28,6 @@ include("meshfield.jl")
 include("derivatives.jl")
 include("levelsetterms.jl")
 include("timestepping.jl")
+include("levelsetequation.jl")
 
 end # module
