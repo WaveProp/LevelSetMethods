@@ -81,6 +81,7 @@ coefficient(cterm::CurvatureTerm) = cterm.b
 Base.show(io::IO, t::CurvatureTerm) = print(io, "b*κ*|∇ϕ|")
 
 function _compute_term(term::CurvatureTerm,ϕ,I)
+    N = dimension(ϕ)    
     b = coefficient(term)
     κ = curvature(ϕ,I)
     # compute |∇ϕ|
@@ -88,8 +89,7 @@ function _compute_term(term::CurvatureTerm,ϕ,I)
         D⁰(ϕ,I,dim)
     end
     # update
-    buffer[I] += b[I]*κ*norm(∇ϕ,2)
-    return buffer
+    return b[I]*κ*norm(∇ϕ,2)
 end
 
 function _compute_cfl(term::CurvatureTerm,ϕ,I,dim)
