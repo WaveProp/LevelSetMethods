@@ -3,9 +3,10 @@
 
 A field described by its discrete values on a mesh.
 """
-struct MeshField{V,M}
+struct MeshField{V,M,B}
     vals::V
     mesh::M
+    bc::B
 end
 
 # getters
@@ -13,9 +14,12 @@ mesh(ϕ::MeshField) = ϕ.mesh
 Base.values(ϕ::MeshField) = ϕ.vals
 grid1d(mf::MeshField,args...) = grid1d(mesh(mf),args...)
 
+has_boundary_condition(mf::MeshField) = (mf.bc !== nothing)
+boundary_condition(mf) = mf.bc
+
 function MeshField(f::Function,m)
     vals = map(f,m)
-    MeshField(vals,m)
+    MeshField(vals,m,nothing)
 end
 
 # geometric dimension
@@ -34,28 +38,11 @@ Base.similar(ϕ::MeshField) = MeshField(similar(values(ϕ)),mesh(ϕ))
 """
     LevelSet
 
-Alias for [`MeshField`](@ref).
+Alias for [`MeshField`](@ref) with a boundary condition.
 """
-const LevelSet{V,M} = MeshField{V,M}
+const LevelSet{V,M,B<:BoundaryCondition} = MeshField{V,M,B}
 
-# function Contour.contour(ϕ::LevelSet)
-#     N = dimension(ϕ)
-#     if N == 2
-#         x = xgrid(ϕ.mesh)
-#         y = ygrid(ϕ.mesh)
-#         c = Contour.contour(x,y,transpose(values(ϕ)),0)
-#         pts = SVector{2,Float64}[]
-#         for l in lines(c)
-#             xs,ys = coordinates(l)
-#             for i in 1:length(xs)
-#                 push!(pts,SVector(xs[i],ys[i]))
-#             end
-#         end
-#         return pts
-#     else
-#         notimplemented()
-#     end
-# end
+applybc!(ϕ::LevelSet) = applybc!(ϕ,boundary_condition(ϕ))
 
 # helpers to add geometric shapes on the a level set
 function add_circle!(ϕ::MeshField, center, r)
