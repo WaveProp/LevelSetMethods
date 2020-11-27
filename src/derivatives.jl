@@ -23,17 +23,101 @@ along dimension `dim`.
     return (ϕ[Ip] - ϕ[I]) / h
 end
 
+function D⁺⁺(ϕ::MeshField,I,dim)
+    h    = meshsize(ϕ,dim)
+    Ip   = _increment_index(I,dim)
+    Ipp  = _increment_index(I,dim,2)
+    return (-1.5*ϕ[I] + 2*ϕ[Ip] - 1/2*ϕ[Ipp]) / h
+end
+
 """
     D⁻(ϕ::MeshField,I,dim)
 
 Backward finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-@inline function D⁻(ϕ::MeshField,I,dim)
+function D⁻(ϕ::MeshField,I,dim)
     h    = meshsize(ϕ,dim)
     Im   = _decrement_index(I,dim)
     return (ϕ[I] - ϕ[Im]) / h
 end
+
+function D⁻⁻(ϕ::MeshField,I,dim)
+    h    = meshsize(ϕ,dim)
+    Im   = _decrement_index(I,dim)
+    Imm   = _decrement_index(I,dim,2)
+    return (1.5*ϕ[I] - 2*ϕ[Im] + 1/2*ϕ[Imm]) / h
+end
+
+function weno5⁻(ϕ::MeshField,I,dim)
+    # see section 3.4 of Osher-Fedwik    
+    Im  = _decrement_index(I,dim)
+    Imm = _decrement_index(Im,dim)
+    Ip  = _increment_index(I,dim)
+    Ipp = _increment_index(Ip,dim)
+    # finite differences
+    v1  = D⁻(ϕ,Imm,dim)
+    v2  = D⁻(ϕ,Im,dim)
+    v3  = D⁻(ϕ,I,dim)
+    v4  = D⁻(ϕ,Ip,dim)
+    v5  = D⁻(ϕ,Ipp,dim)
+    # third-order estimates
+    dϕ1 =  (1/3)*v1 - (7/6)*v2 + (11/6)*v3
+    dϕ2 = -(1/6)*v2 + (5/6)*v3 + (1/3)*v4
+    dϕ3 = (1/3)*v3 + (5/6)*v4 - (1/6)*v5
+    # smoothness indicators
+    S1 = (13/12)*(v1 - 2*v2 + v3)^2 + (1/4)*(v1 - 4*v2 + 3*v3)^2
+    S2 = (13/12)*(v2 - 2*v3 + v4)^2 + (1/4)*(v2 - v4)^2
+    S3 = (13/12)*(v3 - 2*v4 + v5)^2 + (1/4)*(3*v3 - 4*v4 + v5^3)^2
+    # fudge factor
+    ϵ = 1e-6*max(v1^2,v2^2,v3^2,v4^2,v5^2) + 1e-99
+    # weights
+    α1 = 0.1 / (S1+ϵ)^2 
+    α2 = 0.6 / (S2+ϵ)^2 
+    α3 = 0.3 / (S3+ϵ)^2 
+    ω1 = α1 / (α1 + α2 + α3)
+    ω2 = α2 / (α1 + α2 + α3)
+    ω3 = α3 / (α1 + α2 + α3)
+    # WENO approximation
+    return ω1*dϕ1 + ω2*dϕ2 + ω3*dϕ3
+end    
+
+function weno5⁺(ϕ::MeshField,I,dim)
+    # see section 3.4 of Osher-Fedwik    
+    Im  = _decrement_index(I,dim)
+    Imm = _decrement_index(Im,dim)
+    Ip  = _increment_index(I,dim)
+    Ipp = _increment_index(Ip,dim)
+    # finite differences
+    v1  = D⁺(ϕ,Ipp,dim)
+    v2  = D⁺(ϕ,Ip,dim)
+    v3  = D⁺(ϕ,I,dim)
+    v4  = D⁺(ϕ,Im,dim)
+    v5  = D⁺(ϕ,Imm,dim)
+    # third-order estimates
+    dϕ1 =  (1/3)*v1 - (7/6)*v2 + (11/6)*v3
+    dϕ2 = -(1/6)*v2 + (5/6)*v3 + (1/3)*v4
+    dϕ3 = (1/3)*v3 + (5/6)*v4 - (1/6)*v5
+    # smoothness indicators
+    S1 = (13/12)*(v1 - 2*v2 + v3)^2 + (1/4)*(v1 - 4*v2 + 3*v3)^2
+    S2 = (13/12)*(v2 - 2*v3 + v4)^2 + (1/4)*(v2 - v4)^2
+    S3 = (13/12)*(v3 - 2*v4 + v5)^2 + (1/4)*(3*v3 - 4*v4 + v5^3)^2
+    # fudge factor
+    ϵ = 1e-6*max(v1^2,v2^2,v3^2,v4^2,v5^2) + 1e-99
+    # weights
+    α1 = 0.1 / (S1+ϵ)^2 
+    α2 = 0.6 / (S2+ϵ)^2 
+    α3 = 0.3 / (S3+ϵ)^2 
+    ω1 = α1 / (α1 + α2 + α3)
+    ω2 = α2 / (α1 + α2 + α3)
+    ω3 = α3 / (α1 + α2 + α3)
+    # WENO approximation
+    return ω1*dϕ1 + ω2*dϕ2 + ω3*dϕ3
+end    
+
+function weno5⁺(ϕ::MeshField,I,dim)
+
+end    
 
 """
     D2⁰(ϕ::MeshField,I,dim)

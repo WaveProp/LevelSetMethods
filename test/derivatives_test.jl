@@ -2,7 +2,7 @@ using Test
 using LevelSetMethods
 using LinearAlgebra
 
-using LevelSetMethods: D⁺, D⁻, D⁰, D2⁰,D2
+using LevelSetMethods: D⁺, D⁻, D⁰, D2⁰,D2, weno5⁻, weno5⁺
 
 @testset "Uniform mesh" begin
     nx,ny = 100,50
@@ -18,9 +18,11 @@ using LevelSetMethods: D⁺, D⁻, D⁰, D2⁰,D2
         SVector(2x,2y)
     end
     # first derivative    
-    for op in (D⁺,D⁻,D⁰)
+    for op in (D⁺,D⁻,D⁰,weno5⁻,weno5⁺)
         for dir in 1:2
-            @test abs(∇ϕ[I][dir] - op(ϕ,I,dir)) < 5*h[dir]
+            ee =  abs(∇ϕ[I][dir] - op(ϕ,I,dir))   
+            @info ee
+            @test ee < 5*h[dir]
         end
     end
     # second derivative, same direction

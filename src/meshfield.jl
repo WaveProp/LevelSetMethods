@@ -3,9 +3,10 @@
 
 A field described by its discrete values on a mesh.
 """
-struct MeshField{V,M}
+struct MeshField{V,M,B}
     vals::V
     mesh::M
+    bc::B
 end
 
 # getters
@@ -13,9 +14,12 @@ mesh(ϕ::MeshField) = ϕ.mesh
 Base.values(ϕ::MeshField) = ϕ.vals
 grid1d(mf::MeshField,args...) = grid1d(mesh(mf),args...)
 
+has_boundary_condition(mf::MeshField) = (mf.bc !== nothing)
+boundary_condition(mf) = mf.bc
+
 function MeshField(f::Function,m)
     vals = map(f,m)
-    MeshField(vals,m)
+    MeshField(vals,m,nothing)
 end
 
 # geometric dimension
@@ -28,33 +32,26 @@ Base.getindex(ϕ::MeshField,I...) = getindex(values(ϕ),I...)
 Base.setindex!(ϕ::MeshField,vals,I...) = setindex!(values(ϕ),vals,I...)
 Base.size(ϕ::MeshField) = size(values(ϕ))
 Base.eltype(ϕ::MeshField) = eltype(values(ϕ))
-Base.zero(ϕ::MeshField) = MeshField(zero(values(ϕ)),mesh(ϕ))
+Base.zero(ϕ::MeshField) = MeshField(zero(values(ϕ)),mesh(ϕ),boundary_condition(ϕ))
+Base.similar(ϕ::MeshField) = MeshField(similar(values(ϕ)),mesh(ϕ),boundary_condition(ϕ))
 
 """
     LevelSet
 
-Alias for [`MeshField`](@ref).
+Alias for [`MeshField`](@ref) with a boundary condition.
 """
-const LevelSet{V,M} = MeshField{V,M}
+const LevelSet{V,M,B<:BoundaryCondition} = MeshField{V,M,B}
 
-# function Contour.contour(ϕ::LevelSet)
-#     N = dimension(ϕ)
-#     if N == 2
-#         x = xgrid(ϕ.mesh)
-#         y = ygrid(ϕ.mesh)
-#         c = Contour.contour(x,y,transpose(values(ϕ)),0)
-#         pts = SVector{2,Float64}[]
-#         for l in lines(c)
-#             xs,ys = coordinates(l)
-#             for i in 1:length(xs)
-#                 push!(pts,SVector(xs[i],ys[i]))
-#             end
-#         end
-#         return pts
-#     else
-#         notimplemented()
-#     end
-# end
+function LevelSet(f::Function,m,bc::BoundaryCondition=PeriodicBC(0))
+    vals = map(f,m)
+    ϕ = MeshField(vals,m,bc)
+    applybc!(ϕ)
+    return ϕ
+end
+
+applybc!(ϕ::LevelSet) = applybc!(ϕ,boundary_condition(ϕ))
+
+interior_indices(ϕ::LevelSet) = interior_indices(mesh(ϕ),boundary_condition(ϕ))
 
 # helpers to add geometric shapes on the a level set
 function add_circle!(ϕ::MeshField, center, r)
@@ -73,11 +70,11 @@ end
 @recipe function f(ϕ::MeshField)
     N = dimension(ϕ)
     if N == 2 # 2d contour plot
-        seriestype := :contour
+        seriestype --> :contour
         levels --> [0,]
         aspect_ratio --> :equal
         colorbar --> false
-        seriescolor --> :black
+        # seriescolor --> :black
         m = mesh(ϕ)
         # Note: the values of ϕ need be transposed because contour expects the
         # matrix to have rows representing the x values and columns expecting
