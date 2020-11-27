@@ -13,7 +13,7 @@ export
     PeriodicBC,
     AdvectionTerm,
     CurvatureTerm,
-    NormalAdvectionTerm,
+    NormalMotionTerm,
     ReinitializationTerm,
     compute_terms,
     add_circle!,
