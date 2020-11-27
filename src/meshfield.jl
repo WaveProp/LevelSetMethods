@@ -42,7 +42,7 @@ Alias for [`MeshField`](@ref) with a boundary condition.
 """
 const LevelSet{V,M,B<:BoundaryCondition} = MeshField{V,M,B}
 
-function LevelSet(f::Function,m,bc::BoundaryCondition)
+function LevelSet(f::Function,m,bc::BoundaryCondition=PeriodicBC(0))
     vals = map(f,m)
     ϕ = MeshField(vals,m,bc)
     applybc!(ϕ)

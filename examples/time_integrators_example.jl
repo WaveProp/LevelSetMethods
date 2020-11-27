@@ -8,7 +8,7 @@ x     = LinRange(-1,1,nx)
 y     = LinRange(-1,1,ny)
 hx,hy = step(x),step(y)
 grid = CartesianGrid(x,y)
-bc    = PeriodicBC(2)
+bc    = PeriodicBC(3)
 ϕ    = LevelSet(grid,bc) do (x,y)
     1.0
 end

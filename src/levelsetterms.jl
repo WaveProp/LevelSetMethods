@@ -27,6 +27,7 @@ function _compute_cfl(term::LevelSetTerm,ϕ)
         dt = min(dt,cfl)    
     end    
     return dt
+    # FIXME: why does the minimum below allocate? It infers the return type as ...
     # minimum(interior_indices(ϕ)) do I
     #     _compute_cfl(term,ϕ,I)    
     # end    
@@ -52,8 +53,10 @@ function _compute_term(term::AdvectionTerm,ϕ,I,dim)
     v = 𝐮[I][dim]
     if v > 0
         return v*D⁻(ϕ,I,dim)
+        # return v*weno5⁻(ϕ,I,dim)
     else
         return v*D⁺(ϕ,I,dim)
+        # return v*weno5⁺(ϕ,I,dim)
     end
 end
 
