@@ -14,11 +14,14 @@ export
     AdvectionTerm,
     CurvatureTerm,
     NormalAdvectionTerm,
+    ReinitializationTerm,
     compute_terms,
     add_circle!,
+    remove_circle!,
     add_rectangle!,
+    remove_rectangle!,
     ForwardEuler,
-    RK2, 
+    RK2,
     LevelSetEquation,
     integrate!
 

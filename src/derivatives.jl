@@ -50,7 +50,7 @@ function D⁻⁻(ϕ::MeshField,I,dim)
 end
 
 function weno5⁻(ϕ::MeshField,I,dim)
-    # see section 3.4 of Osher-Fedwik    
+    # see section 3.4 of Osher-Fedwik
     Im  = _decrement_index(I,dim)
     Imm = _decrement_index(Im,dim)
     Ip  = _increment_index(I,dim)
@@ -72,18 +72,18 @@ function weno5⁻(ϕ::MeshField,I,dim)
     # fudge factor
     ϵ = 1e-6*max(v1^2,v2^2,v3^2,v4^2,v5^2) + 1e-99
     # weights
-    α1 = 0.1 / (S1+ϵ)^2 
-    α2 = 0.6 / (S2+ϵ)^2 
-    α3 = 0.3 / (S3+ϵ)^2 
+    α1 = 0.1 / (S1+ϵ)^2
+    α2 = 0.6 / (S2+ϵ)^2
+    α3 = 0.3 / (S3+ϵ)^2
     ω1 = α1 / (α1 + α2 + α3)
     ω2 = α2 / (α1 + α2 + α3)
     ω3 = α3 / (α1 + α2 + α3)
     # WENO approximation
     return ω1*dϕ1 + ω2*dϕ2 + ω3*dϕ3
-end    
+end
 
 function weno5⁺(ϕ::MeshField,I,dim)
-    # see section 3.4 of Osher-Fedwik    
+    # see section 3.4 of Osher-Fedwik
     Im  = _decrement_index(I,dim)
     Imm = _decrement_index(Im,dim)
     Ip  = _increment_index(I,dim)
@@ -105,19 +105,19 @@ function weno5⁺(ϕ::MeshField,I,dim)
     # fudge factor
     ϵ = 1e-6*max(v1^2,v2^2,v3^2,v4^2,v5^2) + 1e-99
     # weights
-    α1 = 0.1 / (S1+ϵ)^2 
-    α2 = 0.6 / (S2+ϵ)^2 
-    α3 = 0.3 / (S3+ϵ)^2 
+    α1 = 0.1 / (S1+ϵ)^2
+    α2 = 0.6 / (S2+ϵ)^2
+    α3 = 0.3 / (S3+ϵ)^2
     ω1 = α1 / (α1 + α2 + α3)
     ω2 = α2 / (α1 + α2 + α3)
     ω3 = α3 / (α1 + α2 + α3)
     # WENO approximation
     return ω1*dϕ1 + ω2*dϕ2 + ω3*dϕ3
-end    
+end
 
-function weno5⁺(ϕ::MeshField,I,dim)
-
-end    
+# function weno5⁺(ϕ::MeshField,I,dim)
+#
+# end
 
 """
     D2⁰(ϕ::MeshField,I,dim)
