@@ -1,3 +1,10 @@
+abstract type SpatialScheme end
+
+struct Upwind <: SpatialScheme end
+
+struct WENO5 <: SpatialScheme end
+
+
 """
     D⁰(ϕ::MeshField,I,dim)
 
@@ -113,11 +120,7 @@ function weno5⁺(ϕ::MeshField,I,dim)
     ω3 = α3 / (α1 + α2 + α3)
     # WENO approximation
     return ω1*dϕ1 + ω2*dϕ2 + ω3*dϕ3
-end
-
-# function weno5⁺(ϕ::MeshField,I,dim)
-#
-# end
+end    
 
 """
     D2⁰(ϕ::MeshField,I,dim)

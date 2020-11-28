@@ -3,7 +3,7 @@ using LevelSetMethods
 using LinearAlgebra
 using Plots
 
-nx,ny = 100,100
+nx,ny = 50,50
 x     = LinRange(-1,1,nx)
 y     = LinRange(-1,1,ny)
 hx,hy = step(x),step(y)
@@ -24,7 +24,7 @@ end
 b     = MeshField(grid) do (x,y)
     -min(hx,hy)
 end   
-term1  = NormalAdvectionTerm(v)
+term1  = NormalMotionTerm(v)
 term2  = AdvectionTerm(𝐮)
 term3  = CurvatureTerm(b)
 terms = (term1,term2,term3)

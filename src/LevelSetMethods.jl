@@ -13,7 +13,7 @@ export
     PeriodicBC,
     AdvectionTerm,
     CurvatureTerm,
-    NormalAdvectionTerm,
+    NormalMotionTerm,
     ReinitializationTerm,
     compute_terms,
     add_circle!,
@@ -22,6 +22,8 @@ export
     remove_rectangle!,
     ForwardEuler,
     RK2,
+    Upwind,
+    WENO5,
     LevelSetEquation,
     integrate!
 
