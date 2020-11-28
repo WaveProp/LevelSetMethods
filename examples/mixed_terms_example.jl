@@ -28,7 +28,7 @@ end
 term1  = NormalMotionTerm(v)
 term2  = AdvectionTerm(𝐮)
 term3  = CurvatureTerm(b)
-terms = (term2,)
+terms = (term1,term2,term3)
 buf     = zero(ϕ)
 integrator = ForwardEuler(0.4)
 eq = LevelSetEquation(;terms,integrator,state=ϕ,t=0,buffer=buf)

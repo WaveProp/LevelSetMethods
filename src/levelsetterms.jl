@@ -45,7 +45,7 @@ velocity(adv::AdvectionTerm) = adv.velocity
 
 Base.show(io::IO, t::AdvectionTerm) = print(io, "𝐮 ⋅ ∇ ϕ")
 
-function _compute_term(term::AdvectionTerm,ϕ,I,dim)
+@inline function _compute_term(term::AdvectionTerm,ϕ,I,dim)
     𝐮 = velocity(term)
     N = dimension(ϕ)
     # for dimension dim, compute the upwind derivative and multiply by the
