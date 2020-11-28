@@ -22,6 +22,8 @@ export
     remove_rectangle!,
     ForwardEuler,
     RK2,
+    Upwind,
+    WENO5,
     LevelSetEquation,
     integrate!
 
