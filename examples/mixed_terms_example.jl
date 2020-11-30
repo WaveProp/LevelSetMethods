@@ -27,11 +27,11 @@ b     = MeshField(grid) do (x,y)
 end   
 term1  = NormalMotionTerm(v)
 term2  = AdvectionTerm(velocity=𝐮,scheme=WENO5())
-# term2  = AdvectionTerm(velocity=𝐮,scheme=Upwind())
+term2  = AdvectionTerm(velocity=𝐮,scheme=Upwind())
 term3  = CurvatureTerm(b)
 terms = (term1,term2,term3)
 buf     = zero(ϕ)
-integrator = ForwardEuler(0.4)
+integrator = ForwardEuler()
 eq = LevelSetEquation(;terms,integrator,state=ϕ,t=0,buffer=buf)
 
 dt = 0.01

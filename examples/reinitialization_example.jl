@@ -24,7 +24,7 @@ end
 term1  = ReinitializationTerm()
 terms  = (term1,)
 b = zero(ϕ)
-integrator = ForwardEuler(0.5)
+integrator = ForwardEuler()
 eq = LevelSetEquation(;terms,integrator,state=ϕ,t=0,buffer=b)
 
 # comparison between the level set before and after reinitialization
