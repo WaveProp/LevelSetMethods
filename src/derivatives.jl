@@ -1,9 +1,25 @@
+"""
+    abstract type SpatialScheme
+    
+Discretization schemes for the spatial derivatives.        
+"""
 abstract type SpatialScheme end
 
+"""
+    struct Upwind <: SpatialScheme
+    
+First-order upwind method. Uses `D⁺` and `D⁻` to compute the upwind derivative
+approximation.
+"""
 struct Upwind <: SpatialScheme end
 
+"""
+    struct WENO5 <: SpatialScheme
+    
+Fith-order weighted essentially non-osciallatory method. Uses [`weno5⁺`](@ref) and
+[`weno5⁻`](@ref) to compute right and left biased derivaties.
+"""
 struct WENO5 <: SpatialScheme end
-
 
 """
     D⁰(ϕ::MeshField,I,dim)
@@ -56,6 +72,11 @@ function D⁻⁻(ϕ::MeshField,I,dim)
     return (1.5*ϕ[I] - 2*ϕ[Im] + 1/2*ϕ[Imm]) / h
 end
 
+"""
+    weno5⁻(ϕ,I,dim)
+
+Fith-order weno derivative using the stencil `i-3,i-2,i-1,i,i+1,i+2`.
+"""
 function weno5⁻(ϕ::MeshField,I,dim)
     # see section 3.4 of Osher-Fedwik
     Im  = _decrement_index(I,dim)
@@ -89,6 +110,11 @@ function weno5⁻(ϕ::MeshField,I,dim)
     return ω1*dϕ1 + ω2*dϕ2 + ω3*dϕ3
 end
 
+"""
+    weno5⁺(ϕ,I,dim)
+
+Fith-order weno derivative using the stencil `i-2,i-1,i,i+1,i+2,i+3`.
+"""
 function weno5⁺(ϕ::MeshField,I,dim)
     # see section 3.4 of Osher-Fedwik
     Im  = _decrement_index(I,dim)

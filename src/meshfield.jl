@@ -1,7 +1,9 @@
 """
     struct MeshField{V,M}
 
-A field described by its discrete values on a mesh.
+A field described by its discrete `vals::V` on a `mesh::M`. A boundary condition
+`bc` may aditionally be specified, in which case the nodes of the `Meshfield`
+can be [`interior_nodes`](@ref) or `boundary_nodes`.
 """
 struct MeshField{V,M,B}
     vals::V
@@ -38,7 +40,7 @@ Base.similar(ϕ::MeshField) = MeshField(similar(values(ϕ)),mesh(ϕ),boundary_co
 """
     LevelSet
 
-Alias for [`MeshField`](@ref) with a boundary condition.
+Alias for [`MeshField`](@ref) with a boundary condition `bc::BoundaryCondition`.
 """
 const LevelSet{V,M,B<:BoundaryCondition} = MeshField{V,M,B}
 
@@ -49,36 +51,42 @@ function LevelSet(f::Function,m,bc::BoundaryCondition=PeriodicBC(0))
     return ϕ
 end
 
+"""
+    applybc!(ϕ::LevelSet)
+
+Overwrite the boundary nodes of `ϕ` to impose the boundary conditio `ϕ.bc`.
+"""
 applybc!(ϕ::LevelSet) = applybc!(ϕ,boundary_condition(ϕ))
 
 interior_indices(ϕ::LevelSet) = interior_indices(mesh(ϕ),boundary_condition(ϕ))
 
 # helps to obtain classical shapes's signed distance function
-function CircleSignedDistance(m,center,r)
+function circle_signed_distance(m,center,r)
     rsq = r*r
     return map(x->sum((x.-center).^2)-rsq,m)
 end
-function RectangleSignedDistance(m,center,size)
+
+function rectangle_signed_distance(m,center,size)
     sized2 = 0.5*size
     return map(x->maximum(abs.(x.-center)-sized2),m)
 end
 
 # helpers to add geometric shapes on the a level set
 function add_circle!(ϕ::MeshField,center,r)
-    circle = CircleSignedDistance(mesh(ϕ),center,r)
+    circle = circle_signed_distance(mesh(ϕ),center,r)
     union!(values(ϕ),circle)
 end
 function remove_circle!(ϕ::MeshField, center, r)
-    circle = CircleSignedDistance(mesh(ϕ),center,r)
+    circle = circle_signed_distance(mesh(ϕ),center,r)
     difference!(values(ϕ),circle)
 end
 
 function add_rectangle!(ϕ::MeshField, center, size)
-    rectangle = RectangleSignedDistance(mesh(ϕ),center,size)
+    rectangle = rectangle_signed_distance(mesh(ϕ),center,size)
     union!(values(ϕ),rectangle)
 end
 function remove_rectangle!(ϕ::MeshField, center, size)
-    rectangle = RectangleSignedDistance(mesh(ϕ),center,size)
+    rectangle = rectangle_signed_distance(mesh(ϕ),center,size)
     difference!(values(ϕ),rectangle)
 end
 
