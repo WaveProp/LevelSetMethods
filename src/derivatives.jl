@@ -1,13 +1,13 @@
 """
     abstract type SpatialScheme
-    
-Discretization schemes for the spatial derivatives.        
+
+Discretization schemes for the spatial derivatives.
 """
 abstract type SpatialScheme end
 
 """
     struct Upwind <: SpatialScheme
-    
+
 First-order upwind method. Uses `D⁺` and `D⁻` to compute the upwind derivative
 approximation.
 """
@@ -15,58 +15,58 @@ struct Upwind <: SpatialScheme end
 
 """
     struct WENO5 <: SpatialScheme
-    
+
 Fith-order weighted essentially non-osciallatory method. Uses [`weno5⁺`](@ref) and
 [`weno5⁻`](@ref) to compute right and left biased derivaties.
 """
 struct WENO5 <: SpatialScheme end
 
 """
-    D⁰(ϕ::MeshField,I,dim)
+    D⁰(ϕ::NodeField,I,dim)
 
 Centered finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-function D⁰(ϕ::MeshField,I,dim)
-    h    = meshsize(ϕ,dim)
+function D⁰(ϕ::NodeField,I,dim)
+    h    = step(ϕ,dim)
     Im   = _decrement_index(I,dim)
     Ip   = _increment_index(I,dim)
     return (ϕ[Ip] - ϕ[Im]) / (2h)
 end
 
 """
-    D⁺(ϕ::MeshField,I,dim)
+    D⁺(ϕ::NodeField,I,dim)
 
 Forward finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-@inline function D⁺(ϕ::MeshField,I,dim)
-    h  = meshsize(ϕ,dim)
+@inline function D⁺(ϕ::NodeField,I,dim)
+    h  = step(ϕ,dim)
     Ip = _increment_index(I,dim)
     return (ϕ[Ip] - ϕ[I]) / h
 end
 
-function D⁺⁺(ϕ::MeshField,I,dim)
-    h    = meshsize(ϕ,dim)
+function D⁺⁺(ϕ::NodeField,I,dim)
+    h    = step(ϕ,dim)
     Ip   = _increment_index(I,dim)
     Ipp  = _increment_index(I,dim,2)
     return (-1.5*ϕ[I] + 2*ϕ[Ip] - 1/2*ϕ[Ipp]) / h
 end
 
 """
-    D⁻(ϕ::MeshField,I,dim)
+    D⁻(ϕ::NodeField,I,dim)
 
 Backward finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-function D⁻(ϕ::MeshField,I,dim)
-    h    = meshsize(ϕ,dim)
+function D⁻(ϕ::NodeField,I,dim)
+    h    = step(ϕ,dim)
     Im   = _decrement_index(I,dim)
     return (ϕ[I] - ϕ[Im]) / h
 end
 
-function D⁻⁻(ϕ::MeshField,I,dim)
-    h    = meshsize(ϕ,dim)
+function D⁻⁻(ϕ::NodeField,I,dim)
+    h    = step(ϕ,dim)
     Im   = _decrement_index(I,dim)
     Imm   = _decrement_index(I,dim,2)
     return (1.5*ϕ[I] - 2*ϕ[Im] + 1/2*ϕ[Imm]) / h
@@ -77,7 +77,7 @@ end
 
 Fith-order weno derivative using the stencil `i-3,i-2,i-1,i,i+1,i+2`.
 """
-function weno5⁻(ϕ::MeshField,I,dim)
+function weno5⁻(ϕ::NodeField,I,dim)
     # see section 3.4 of Osher-Fedwik
     Im  = _decrement_index(I,dim)
     Imm = _decrement_index(Im,dim)
@@ -115,7 +115,7 @@ end
 
 Fith-order weno derivative using the stencil `i-2,i-1,i,i+1,i+2,i+3`.
 """
-function weno5⁺(ϕ::MeshField,I,dim)
+function weno5⁺(ϕ::NodeField,I,dim)
     # see section 3.4 of Osher-Fedwik
     Im  = _decrement_index(I,dim)
     Imm = _decrement_index(Im,dim)
@@ -146,23 +146,23 @@ function weno5⁺(ϕ::MeshField,I,dim)
     ω3 = α3 / (α1 + α2 + α3)
     # WENO approximation
     return ω1*dϕ1 + ω2*dϕ2 + ω3*dϕ3
-end    
+end
 
 """
-    D2⁰(ϕ::MeshField,I,dim)
+    D2⁰(ϕ::NodeField,I,dim)
 
 Centered finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁰(ϕ::MeshField,I,dim)
-    h    = meshsize(ϕ,dim)
+function D2⁰(ϕ::NodeField,I,dim)
+    h    = step(ϕ,dim)
     Im   = _decrement_index(I,dim)
     Ip   = _increment_index(I,dim)
     return (ϕ[Ip] - 2ϕ[I] + ϕ[Im]) / h^2
 end
 
 """
-    D2(ϕ::MeshField,I,dims)
+    D2(ϕ::NodeField,I,dims)
 
 Finite difference scheme for second order derivative at grid point `I`
 along the dimensions `dims`.
@@ -170,33 +170,33 @@ along the dimensions `dims`.
 If `dims[1] == dims[2]`, it is more efficient to call `D2⁰(ϕ,I,dims[1])`.
 """
 function D2(ϕ,I,dims)
-    h  = meshsize(ϕ)
+    h  = step(ϕ)
     Ip = _increment_index(I,dims[1])
     Im = _decrement_index(I,dims[1])
     (D⁰(ϕ,Ip,dims[2]) - D⁰(ϕ,Im,dims[2]))/(2*h[dims[1]])
 end
 
 """
-    D2⁺⁺(ϕ::MeshField,I,dim)
+    D2⁺⁺(ϕ::NodeField,I,dim)
 
 Upward finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁺⁺(ϕ::MeshField,I,dim)
-    h    = meshsize(ϕ,dim)
+function D2⁺⁺(ϕ::NodeField,I,dim)
+    h    = step(ϕ,dim)
     Ip   = _increment_index(I,dim,1)
     Ipp  = _increment_index(I,dim,2)
     return (ϕ[I] - 2ϕ[Ip] + ϕ[Ipp]) / h^2
 end
 
 """
-    D2⁻⁺(ϕ::MeshField,I,dim)
+    D2⁻⁺(ϕ::NodeField,I,dim)
 
 Backward finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁻⁻(ϕ::MeshField,I,dim)
-    h    = meshsize(ϕ,dim)
+function D2⁻⁻(ϕ::NodeField,I,dim)
+    h    = step(ϕ,dim)
     Im   = _decrement_index(I,dim,1)
     Imm  = _decrement_index(I,dim,2)
     return (ϕ[Imm] - 2ϕ[Im] + ϕ[I]) / h^2

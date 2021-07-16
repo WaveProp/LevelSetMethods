@@ -8,19 +8,19 @@ using LevelSetMethods: D⁺, D⁻, D⁰, D2⁰,D2, weno5⁻, weno5⁺
     nx,ny = 100,50
     x     = LinRange(-2,2,nx)
     y     = LinRange(-2,2,ny)
-    grid = CartesianGrid(x,y)
-    h    = meshsize(grid)
+    grid = UniformCartesianMesh(x,y)
+    h    = step(grid)
     ϕ    = LevelSet(grid) do (x,y)
         x^2 + y^2 - 1
-    end    
+    end
     I  = CartesianIndex(9,7)
-    ∇ϕ   = MeshField(grid) do (x,y)
+    ∇ϕ   = NodeField(grid) do (x,y)
         SVector(2x,2y)
     end
-    # first derivative    
+    # first derivative
     for op in (D⁺,D⁻,D⁰,weno5⁻,weno5⁺)
         for dir in 1:2
-            ee =  abs(∇ϕ[I][dir] - op(ϕ,I,dir))   
+            ee =  abs(∇ϕ[I][dir] - op(ϕ,I,dir))
             @test ee < 5*h[dir]
         end
     end

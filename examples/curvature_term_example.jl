@@ -4,37 +4,28 @@ using WavePropBase
 using LinearAlgebra
 using Plots
 
-hx,hy = 0.01,0.02
+hx,hy = 0.05,0.05
 domain = HyperRectangle((-1,-1),(1,1))
 M      = UniformCartesianMesh(domain;step=(hx,hy))
-bc   = PeriodicBC(3)
+bc   = PeriodicBC(1)
 ϕ    = LevelSet(M,bc) do (x,y)
     Inf
 end
 add_circle!(ϕ,SVector(0.5,0.0),0.25)
 add_circle!(ϕ,SVector(-0.5,0.0),0.25)
 add_rectangle!(ϕ,SVector(0.0,0.0),SVector(1.0,0.1))
-v     = NodeField(M) do (x,y)
-    -0.1
-end
-u     = NodeField(M) do (x,y)
-    SVector(-y,x)
-end
 b     = NodeField(M) do (x,y)
     -min(hx,hy)
 end
-term1  = NormalMotionTerm(v)
-term2  = AdvectionTerm(velocity=u)
-term3  = CurvatureTerm(b)
-terms = (term1,term2,term3)
-terms = (term3,)
+term  = CurvatureTerm(b)
 integrator = ForwardEuler()
-eq = LevelSetEquation(;terms,integrator,state=ϕ,t=0)
+eq = LevelSetEquation(;terms=(term,),integrator,state=ϕ,t=0)
 
 dt = 0.01
 anim = @animate for n ∈ 0:100
     tf = dt*n
     integrate!(eq,tf)
     fig = plot(eq,linecolor=:black,linestyle = :solid)
+    # fig = heatmap(eq,colorbar=true)
 end
 gif(anim, "test.gif")

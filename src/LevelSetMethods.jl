@@ -3,12 +3,19 @@ module LevelSetMethods
 using LinearAlgebra
 using StaticArrays
 using RecipesBase
+using Base.Threads: @threads, @spawn
+
+using WavePropBase
+using WavePropBase.Geometry
+using WavePropBase.Mesh
+using WavePropBase.Utils
+WavePropBase.@import_interface
 
 export
-    CartesianGrid,
-    meshsize,
+    UniformCartesianMesh,
+    HyperRectangle,
     SVector,
-    MeshField,
+    NodeField,
     LevelSet,
     PeriodicBC,
     AdvectionTerm,
@@ -22,14 +29,16 @@ export
     remove_rectangle!,
     ForwardEuler,
     RK2,
+    RKLM2,
     Upwind,
     WENO5,
     LevelSetEquation,
+    NodeIterator,
+    ElementIterator,
     integrate!
 
-include("meshes.jl")
 include("boundaryconditions.jl")
-include("meshfield.jl")
+include("nodefield.jl")
 include("derivatives.jl")
 include("levelsetterms.jl")
 include("timestepping.jl")

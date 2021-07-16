@@ -13,7 +13,7 @@ end
 
 # generic method, loops over dimensions
 function _compute_cfl(term::LevelSetTerm,ϕ,I)
-    N = dimension(ϕ)
+    N = ambient_dimension(ϕ)
     minimum(1:N) do dim
         _compute_cfl(term,ϕ,I,dim)
     end
@@ -27,10 +27,6 @@ function _compute_cfl(term::LevelSetTerm,ϕ)
         dt = min(dt,cfl)
     end
     return dt
-    # FIXME: why does the minimum below allocate? It infers the return type as Any...
-    # minimum(interior_indices(ϕ)) do I
-    #     _compute_cfl(term,ϕ,I)
-    # end
 end
 
 """
@@ -39,7 +35,7 @@ end
 Level-set advection term representing  `𝐯 ⋅ ∇ϕ`.
 """
 Base.@kwdef struct AdvectionTerm{V,M,S<:SpatialScheme} <: LevelSetTerm
-    velocity::MeshField{V,M}
+    velocity::NodeField{V,M}
     scheme::S = Upwind()
 end
 velocity(adv::AdvectionTerm) = adv.velocity
@@ -48,9 +44,9 @@ scheme(adv::AdvectionTerm) = adv.scheme
 Base.show(io::IO, t::AdvectionTerm) = print(io, "𝐮 ⋅ ∇ ϕ")
 
 @inline function _compute_term(term::AdvectionTerm,ϕ,I,dim)
-    sch = scheme(term)    
+    sch = scheme(term)
     𝐮 = velocity(term)
-    N = dimension(ϕ)
+    N = ambient_dimension(ϕ)
     # for dimension dim, compute the upwind derivative and multiply by the
     # velocity
     v = 𝐮[I][dim]
@@ -58,7 +54,7 @@ Base.show(io::IO, t::AdvectionTerm) = print(io, "𝐮 ⋅ ∇ ϕ")
         if sch === Upwind()
             return v*D⁻(ϕ,I,dim)
         elseif sch === WENO5()
-            return v*weno5⁻(ϕ,I,dim)    
+            return v*weno5⁻(ϕ,I,dim)
         else
             error("scheme $sch not implemented")
         end
@@ -66,15 +62,15 @@ Base.show(io::IO, t::AdvectionTerm) = print(io, "𝐮 ⋅ ∇ ϕ")
         if sch === Upwind()
             return v*D⁺(ϕ,I,dim)
         elseif sch === WENO5()
-            return v*weno5⁺(ϕ,I,dim)    
+            return v*weno5⁺(ϕ,I,dim)
         else
             error("scheme $sch not implemented")
-        end    
+        end
     end
 end
 
 function _compute_term(term::AdvectionTerm,ϕ,I)
-    N = dimension(ϕ)
+    N = ambient_dimension(ϕ)
     sum(1:N) do dim
         _compute_term(term,ϕ,I,dim)
     end
@@ -82,10 +78,10 @@ end
 
 function _compute_cfl(term::AdvectionTerm,ϕ,I,dim)
     𝐮 = velocity(term)[I]
-    N = dimension(ϕ)
+    N = ambient_dimension(ϕ)
     # for each dimension, compute the upwind derivative and multiply by the
     # velocity and add to buffer
-    Δx = meshsize(ϕ)[dim]
+    Δx = step(ϕ)[dim]
     return Δx/abs(𝐮[dim])
 end
 
@@ -96,14 +92,14 @@ Level-set curvature term representing `bκ|∇ϕ|`, where `κ = ∇ ⋅ (∇ϕ/|
 the curvature.
 """
 struct CurvatureTerm{V,M} <: LevelSetTerm
-    b::MeshField{V,M}
+    b::NodeField{V,M}
 end
 coefficient(cterm::CurvatureTerm) = cterm.b
 
 Base.show(io::IO, t::CurvatureTerm) = print(io, "b κ|∇ϕ|")
 
 function _compute_term(term::CurvatureTerm,ϕ,I)
-    N = dimension(ϕ)
+    N = ambient_dimension(ϕ)
     b = coefficient(term)
     κ = curvature(ϕ,I)
     # compute |∇ϕ|
@@ -116,12 +112,12 @@ end
 
 function _compute_cfl(term::CurvatureTerm,ϕ,I,dim)
     b = coefficient(term)[I]
-    Δx = meshsize(ϕ)[dim]
+    Δx = step(ϕ)[dim]
     return (Δx)^2/(2*abs(b))
 end
 
 function curvature(ϕ::LevelSet,I)
-    N = dimension(ϕ)
+    N = ambient_dimension(ϕ)
     if N == 2
         ϕx  = D⁰(ϕ,I,1)
         ϕy  = D⁰(ϕ,I,2)
@@ -155,7 +151,7 @@ used for internally generated velocity fields; for externally generated
 velocities you may use `AdvectionTerm` instead.
 """
 @Base.kwdef struct NormalMotionTerm{V,M} <: LevelSetTerm
-    speed::MeshField{V,M}
+    speed::NodeField{V,M}
 end
 speed(adv::NormalMotionTerm) = adv.speed
 
@@ -169,9 +165,9 @@ function _compute_term(term::NormalMotionTerm,ϕ,I)
 end
 
 function _compute_∇_normal_motion(v,ϕ,I)
-    N = dimension(ϕ)
+    N = ambient_dimension(ϕ)
     mA0²,mB0² = sum(1:N) do dim
-        h = meshsize(ϕ,dim)
+        h = step(ϕ,dim)
         A = D⁻(ϕ,I,dim) + 0.5 * h * limiter(D2⁻⁻(ϕ,I,dim), D2⁰(ϕ,I,dim))
         B = D⁺(ϕ,I,dim) - 0.5 * h * limiter(D2⁺⁺(ϕ,I,dim), D2⁰(ϕ,I,dim))
         if v > 0.0
@@ -185,7 +181,7 @@ end
 
 function _compute_cfl(term::NormalMotionTerm,ϕ,I,dim)
     u = speed(term)[I]
-    Δx = meshsize(ϕ)[dim]
+    Δx = step(ϕ)[dim]
     return Δx/abs(u)
 end
 
@@ -217,4 +213,4 @@ function _compute_term(term::ReinitializationTerm,ϕ,I)
     return (∇ - 1.0) * v
 end
 
-_compute_cfl(term::ReinitializationTerm,ϕ,I,dim) = meshsize(ϕ)[dim]
+_compute_cfl(term::ReinitializationTerm,ϕ,I,dim) = step(ϕ)[dim]

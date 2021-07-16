@@ -1,6 +1,6 @@
 """
     abstract type BoundaryCondition
-    
+
 Singleton types used in [`applybc!`](@ref) for dispatch purposes.
 
 Boundary conditions are imposed by a *ghost node* method, meaning that meshes
@@ -26,12 +26,12 @@ applied to all dimensions of `mf`.
 function applybc! end
 
 function applybc!(mf,bc::BoundaryCondition)
-    N = dimension(mf)
+    N = ambient_dimension(mesh(mf))
     for dim in 1:N
-        applybc!(mf,bc,dim)    
-    end    
+        applybc!(mf,bc,dim)
+    end
     return mf
-end    
+end
 
 """
     interior_indices(mesh,bc::BoundaryCondition)
@@ -41,20 +41,22 @@ of the `mesh`.
 """
 function interior_indices end
 
-function interior_indices(g::CartesianGrid,bc::BoundaryCondition)
-    P  = num_ghost_points(bc)    
-    N  = dimension(g)
-    sz = size(g)
+function interior_indices(iter::NodeIterator{<:UniformCartesianMesh},bc::BoundaryCondition)
+    g  = mesh(iter)
+    P  = num_ghost_points(bc)
+    N  = ambient_dimension(g)
+    sz = size(iter)
+    # range of nodes in each dimenion. Excludes the first P and last P nodes
     I  = ntuple(N) do dim
         P+1:sz[dim]-P
     end
     return CartesianIndices(I)
-end    
+end
 
 """
     struct PeriodicBC{P}
-    
-A periodic boundary condition with `P` periodic nodes. 
+
+A periodic boundary condition with `P` periodic nodes.
 """
 struct PeriodicBC{N} <: BoundaryCondition end
 
@@ -63,19 +65,19 @@ PeriodicBC(n::Int) = PeriodicBC{n}()
 num_ghost_points(bc::PeriodicBC{N}) where {N} = N
 
 function applybc!(mf,bc::PeriodicBC{P},dir) where {P}
-    @assert mesh(mf) isa CartesianGrid "boundary condition $(typeof(bc)) on $(typeof(mesh(mf))) not supported"
+    @assert mesh(mf) isa UniformCartesianMesh "boundary condition $(typeof(bc)) on $(typeof(mesh(mf))) not supported"
     ϕ       = values(mf)
     I⁻r,I⁺r = _index_read(mf,bc,dir)
     I⁻w,I⁺w = _index_write(mf,bc,dir)
     @views copy!(ϕ[I⁻w],ϕ[I⁺r])
     @views copy!(ϕ[I⁺w],ϕ[I⁻r])
     return mf
-end    
+end
 
 """
     struct NeumannBC{P}
-    
-A homogeneours Neumann boundary condition with `P` nodes. 
+
+A homogeneours Neumann boundary condition with `P` nodes.
 
 # TODO: what should this do for `P>1`?
 """
@@ -87,43 +89,43 @@ num_ghost_points(bc::NeumannBC{N}) where {N} = N
 ## Helper functions
 
 function _index_write(mf,bc::BoundaryCondition,dir)
-    P = num_ghost_points(bc)    
+    P = num_ghost_points(bc)
     sz = size(mf)
     N  = length(sz)
     Il = ntuple(N) do dim
         if dim == dir
-            1:P    
+            1:P
         else
             1:sz[dim]
         end
-    end    
+    end
     Ir = ntuple(N) do dim
         if dim == dir
             (sz[dim]-P+1):sz[dim]
         else
             1:sz[dim]
         end
-    end    
+    end
     return CartesianIndices(Il), CartesianIndices(Ir)
-end    
+end
 
 function _index_read(mf,bc::BoundaryCondition,dir)
-    P  = num_ghost_points(bc)    
+    P  = num_ghost_points(bc)
     sz = size(mf)
     N  = length(sz)
     Il = ntuple(N) do dim
         if dim == dir
-            (P+1):2P    
+            (P+1):2P
         else
             1:sz[dim]
         end
-    end    
+    end
     Ir = ntuple(N) do dim
         if dim == dir
             (sz[dim]-2P+1):(sz[dim]-P)
         else
             1:sz[dim]
         end
-    end    
+    end
     return CartesianIndices(Il), CartesianIndices(Ir)
-end    
+end
