@@ -22,53 +22,53 @@ Fith-order weighted essentially non-osciallatory method. Uses [`weno5⁺`](@ref)
 struct WENO5 <: SpatialScheme end
 
 """
-    D⁰(ϕ::NodeField,I,dim)
+    D⁰(ϕ,I,dim)
 
 Centered finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-function D⁰(ϕ::NodeField,I,dim)
+function D⁰(ϕ,I,dim)
     h    = step(ϕ,dim)
-    Im   = _decrement_index(I,dim)
-    Ip   = _increment_index(I,dim)
+    Im   = decrement_index(I,dim)
+    Ip   = increment_index(I,dim)
     return (ϕ[Ip] - ϕ[Im]) / (2h)
 end
 
 """
-    D⁺(ϕ::NodeField,I,dim)
+    D⁺(ϕ,I,dim)
 
 Forward finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-@inline function D⁺(ϕ::NodeField,I,dim)
+@inline function D⁺(ϕ,I,dim)
     h  = step(ϕ,dim)
-    Ip = _increment_index(I,dim)
+    Ip = increment_index(I,dim)
     return (ϕ[Ip] - ϕ[I]) / h
 end
 
-function D⁺⁺(ϕ::NodeField,I,dim)
+function D⁺⁺(ϕ,I,dim)
     h    = step(ϕ,dim)
-    Ip   = _increment_index(I,dim)
-    Ipp  = _increment_index(I,dim,2)
+    Ip   = increment_index(I,dim)
+    Ipp  = increment_index(I,dim,2)
     return (-1.5*ϕ[I] + 2*ϕ[Ip] - 1/2*ϕ[Ipp]) / h
 end
 
 """
-    D⁻(ϕ::NodeField,I,dim)
+    D⁻(ϕ,I,dim)
 
 Backward finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-function D⁻(ϕ::NodeField,I,dim)
+function D⁻(ϕ,I,dim)
     h    = step(ϕ,dim)
-    Im   = _decrement_index(I,dim)
+    Im   = decrement_index(I,dim)
     return (ϕ[I] - ϕ[Im]) / h
 end
 
-function D⁻⁻(ϕ::NodeField,I,dim)
+function D⁻⁻(ϕ,I,dim)
     h    = step(ϕ,dim)
-    Im   = _decrement_index(I,dim)
-    Imm   = _decrement_index(I,dim,2)
+    Im   = decrement_index(I,dim)
+    Imm   = decrement_index(I,dim,2)
     return (1.5*ϕ[I] - 2*ϕ[Im] + 1/2*ϕ[Imm]) / h
 end
 
@@ -77,12 +77,12 @@ end
 
 Fith-order weno derivative using the stencil `i-3,i-2,i-1,i,i+1,i+2`.
 """
-function weno5⁻(ϕ::NodeField,I,dim)
+function weno5⁻(ϕ,I,dim)
     # see section 3.4 of Osher-Fedwik
-    Im  = _decrement_index(I,dim)
-    Imm = _decrement_index(Im,dim)
-    Ip  = _increment_index(I,dim)
-    Ipp = _increment_index(Ip,dim)
+    Im  = decrement_index(I,dim)
+    Imm = decrement_index(Im,dim)
+    Ip  = increment_index(I,dim)
+    Ipp = increment_index(Ip,dim)
     # finite differences
     v1  = D⁻(ϕ,Imm,dim)
     v2  = D⁻(ϕ,Im,dim)
@@ -115,12 +115,12 @@ end
 
 Fith-order weno derivative using the stencil `i-2,i-1,i,i+1,i+2,i+3`.
 """
-function weno5⁺(ϕ::NodeField,I,dim)
+function weno5⁺(ϕ,I,dim)
     # see section 3.4 of Osher-Fedwik
-    Im  = _decrement_index(I,dim)
-    Imm = _decrement_index(Im,dim)
-    Ip  = _increment_index(I,dim)
-    Ipp = _increment_index(Ip,dim)
+    Im  = decrement_index(I,dim)
+    Imm = decrement_index(Im,dim)
+    Ip  = increment_index(I,dim)
+    Ipp = increment_index(Ip,dim)
     # finite differences
     v1  = D⁺(ϕ,Ipp,dim)
     v2  = D⁺(ϕ,Ip,dim)
@@ -149,20 +149,20 @@ function weno5⁺(ϕ::NodeField,I,dim)
 end
 
 """
-    D2⁰(ϕ::NodeField,I,dim)
+    D2⁰(ϕ,I,dim)
 
 Centered finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁰(ϕ::NodeField,I,dim)
+function D2⁰(ϕ,I,dim)
     h    = step(ϕ,dim)
-    Im   = _decrement_index(I,dim)
-    Ip   = _increment_index(I,dim)
+    Im   = decrement_index(I,dim)
+    Ip   = increment_index(I,dim)
     return (ϕ[Ip] - 2ϕ[I] + ϕ[Im]) / h^2
 end
 
 """
-    D2(ϕ::NodeField,I,dims)
+    D2(ϕ,I,dims)
 
 Finite difference scheme for second order derivative at grid point `I`
 along the dimensions `dims`.
@@ -171,47 +171,65 @@ If `dims[1] == dims[2]`, it is more efficient to call `D2⁰(ϕ,I,dims[1])`.
 """
 function D2(ϕ,I,dims)
     h  = step(ϕ)
-    Ip = _increment_index(I,dims[1])
-    Im = _decrement_index(I,dims[1])
+    Ip = increment_index(I,dims[1])
+    Im = decrement_index(I,dims[1])
     (D⁰(ϕ,Ip,dims[2]) - D⁰(ϕ,Im,dims[2]))/(2*h[dims[1]])
 end
 
 """
-    D2⁺⁺(ϕ::NodeField,I,dim)
+    D2⁺⁺(ϕ,I,dim)
 
 Upward finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁺⁺(ϕ::NodeField,I,dim)
+function D2⁺⁺(ϕ,I,dim)
     h    = step(ϕ,dim)
-    Ip   = _increment_index(I,dim,1)
-    Ipp  = _increment_index(I,dim,2)
+    Ip   = increment_index(I,dim,1)
+    Ipp  = increment_index(I,dim,2)
     return (ϕ[I] - 2ϕ[Ip] + ϕ[Ipp]) / h^2
 end
 
 """
-    D2⁻⁺(ϕ::NodeField,I,dim)
+    D2⁻⁻(ϕ,I,dim)
 
 Backward finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁻⁻(ϕ::NodeField,I,dim)
+function D2⁻⁻(ϕ,I,dim)
     h    = step(ϕ,dim)
-    Im   = _decrement_index(I,dim,1)
-    Imm  = _decrement_index(I,dim,2)
+    Im   = decrement_index(I,dim,1)
+    Imm  = decrement_index(I,dim,2)
     return (ϕ[Imm] - 2ϕ[Im] + ϕ[I]) / h^2
 end
 
+"""
+    curvature(ϕ,I)
 
-# Helper functions
-function _increment_index(I::CartesianIndex,dim::Integer,nb::Integer=1)
-    N = length(I)
-    @assert 1 ≤ dim ≤ length(I)
-    return I + CartesianIndex(ntuple(i -> i==dim ? nb : 0,N))
-end
-
-function _decrement_index(I::CartesianIndex,dim::Integer,nb::Integer=1)
-    N = length(I)
-    @assert 1 ≤ dim ≤ length(I)
-    return I + CartesianIndex(ntuple(i -> i==dim ? -nb : 0,N))
+Compute ∇ ⋅ (∇ ϕ / |∇ ϕ|) at grid point `I`.
+"""
+function curvature(ϕ,I)
+    N = ambient_dimension(ϕ)
+    if N == 2
+        ϕx  = D⁰(ϕ,I,1)
+        ϕy  = D⁰(ϕ,I,2)
+        ϕxx = D2⁰(ϕ,I,1)
+        ϕyy = D2⁰(ϕ,I,2)
+        ϕxy = D2(ϕ,I,(2,1))
+        κ   = (ϕxx*(ϕy)^2 - 2*ϕy*ϕx*ϕxy + ϕyy*ϕx^2) / (ϕx^2 + ϕy^2)^(3/2)
+        return κ
+    elseif N == 3
+        ϕx  = D⁰(ϕ,I,1)
+        ϕy  = D⁰(ϕ,I,2)
+        ϕz  = D⁰(ϕ,I,3)
+        ϕxx = D2⁰(ϕ,I,1)
+        ϕyy = D2⁰(ϕ,I,2)
+        ϕzz = D2⁰(ϕ,I,3)
+        ϕxy = D2(ϕ,I,(2,1))
+        ϕxz = D2(ϕ,I,(3,1))
+        # TODO: test + simplify this
+        κ   = (ϕxx*(ϕy)^2 - 2*ϕy*ϕx*ϕxy + ϕyy*ϕx^2 + ϕx^2*ϕzz - 2*ϕx*ϕz*ϕxz + ϕz^2*ϕxx + ϕy^2*ϕzz - 2*ϕy*ϕz*ϕyz + ϕz^2*ϕyy) / (ϕx^2 + ϕy^2)^3/2
+        return κ
+    else
+        notimplemented()
+    end
 end

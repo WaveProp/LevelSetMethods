@@ -1,23 +1,24 @@
 using Test
 using LevelSetMethods
 using LinearAlgebra
+using StaticArrays
+import WavePropBase as WPB
 
 using LevelSetMethods: D⁺, D⁻, D⁰, D2⁰,D2, weno5⁻, weno5⁺
 
 @testset "Uniform mesh" begin
     nx,ny = 100,50
-    x     = LinRange(-2,2,nx)
-    y     = LinRange(-2,2,ny)
-    grid = UniformCartesianMesh(x,y)
+    rec   = WPB.HyperRectangle((-2.,-2.),(2.,2.))
+    grid  = WPB.UniformCartesianMesh(rec,(nx,ny))
     h    = step(grid)
-    ϕ    = LevelSet(grid) do (x,y)
+    ϕ    = CartesianGridFunction(grid) do (x,y)
         x^2 + y^2 - 1
     end
-    I  = CartesianIndex(9,7)
-    ∇ϕ   = NodeField(grid) do (x,y)
+    ∇ϕ   = CartesianGridFunction(grid) do (x,y)
         SVector(2x,2y)
     end
     # first derivative
+    I  = CartesianIndex(9,7)
     for op in (D⁺,D⁻,D⁰,weno5⁻,weno5⁺)
         for dir in 1:2
             ee =  abs(∇ϕ[I][dir] - op(ϕ,I,dir))

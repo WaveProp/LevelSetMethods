@@ -5,43 +5,46 @@ using StaticArrays
 using RecipesBase
 using Base.Threads: @threads, @spawn
 
-using WavePropBase
-using WavePropBase.Geometry
-using WavePropBase.Mesh
-using WavePropBase.Utils
-WavePropBase.@import_interface
-
-export
-    UniformCartesianMesh,
+import WavePropBase:
+    AbstractEntity,
     HyperRectangle,
-    SVector,
-    NodeField,
-    LevelSet,
-    PeriodicBC,
-    AdvectionTerm,
-    CurvatureTerm,
-    NormalMotionTerm,
-    ReinitializationTerm,
-    compute_terms,
-    add_circle!,
-    remove_circle!,
-    add_rectangle!,
-    remove_rectangle!,
-    ForwardEuler,
-    RK2,
-    RKLM2,
-    Upwind,
-    WENO5,
-    LevelSetEquation,
-    NodeIterator,
+    UniformCartesianMesh,
     ElementIterator,
-    integrate!
+    NodeIterator,
+    LagrangeSquare,
+    LagrangeTriangle,
+    mesh,
+    domain,
+    grids,
+    element_index_for_point,
+    vals,
+    ambient_dimension,
+    new_tag,
+    low_corner,
+    width,
+    global_add_entity!,
+    increment_index,
+    decrement_index
 
 include("boundaryconditions.jl")
-include("nodefield.jl")
+include("gridfunction.jl")
+include("levelset.jl")
 include("derivatives.jl")
-include("levelsetterms.jl")
 include("timestepping.jl")
 include("levelsetequation.jl")
+# include("meshgen.jl")
+
+export
+    LevelSetEquation,
+    LevelSet,
+    DiscreteLevelSet,
+    CartesianGridFunction,
+    PeriodicBC,
+    AdvectionTerm,
+    Upwind,
+    WENO5,
+    ForwardEuler,
+    RK2,
+    integrate!
 
 end # module

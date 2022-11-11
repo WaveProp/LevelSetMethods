@@ -1,6 +1,8 @@
 using SafeTestsets
 using LevelSetMethods
 
-@safetestset "Derivatives tests" begin include("derivatives_test.jl") end
+@safetestset "Grid functions" begin include("gridfunction_test.jl") end
 
-@safetestset "Meshes tests" begin include("meshes_test.jl") end
+@safetestset "Level set" begin include("levelsetentity_test.jl") end
+
+@safetestset "Derivatives" begin include("derivatives_test.jl") end

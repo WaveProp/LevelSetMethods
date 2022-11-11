@@ -34,18 +34,16 @@ function applybc!(mf,bc::BoundaryCondition)
 end
 
 """
-    interior_indices(mesh,bc::BoundaryCondition)
+    interior_indices(ϕ,bc::BoundaryCondition)
 
-Given a `mesh` and a `bc`, return the indices to iterate over the interior nodes
-of the `mesh`.
+Indices to iterate over the interior nodes of `ϕ`.
 """
 function interior_indices end
 
-function interior_indices(iter::NodeIterator{<:UniformCartesianMesh},bc::BoundaryCondition)
-    g  = mesh(iter)
+function interior_indices(ϕ,bc::BoundaryCondition)
     P  = num_ghost_points(bc)
-    N  = ambient_dimension(g)
-    sz = size(iter)
+    sz = size(ϕ)
+    N  = length(sz)
     # range of nodes in each dimenion. Excludes the first P and last P nodes
     I  = ntuple(N) do dim
         P+1:sz[dim]-P

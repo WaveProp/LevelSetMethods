@@ -1,39 +1,33 @@
 using Test
 using LevelSetMethods
-using WavePropBase
 using LinearAlgebra
+using StaticArrays
 using Plots
 
-nx,ny = 201,201
-x     = LinRange(-2,2,nx)
-y     = LinRange(-2,2,ny)
-M  = UniformCartesianMesh(x,y)
+import WavePropBase as WPB
+
+nx,ny = 200,200
+rec   = WPB.HyperRectangle((-2,-2),(2.,2.))
+M     = WPB.UniformCartesianMesh(rec,(nx,ny))
 bc    = PeriodicBC(3)
-ϕ₀    = LevelSet(M,bc) do (x,y)
+ϕ     = DiscreteLevelSet(M,0) do (x,y)
     sqrt((x+0.4)^2 + y^2) - 0.35
 end
-𝐮     = NodeField(M) do (x,y)
+𝐮     = CartesianGridFunction(M) do (x,y)
     2π*SVector(-y,x)
 end
-term1  = AdvectionTerm(velocity=𝐮,scheme=Upwind())
+term1  = AdvectionTerm(velocity=𝐮,scheme=WENO5())
 terms  = (term1,)
-fig = plot(ϕ₀)
+# msh = Mesh.GenericMesh{2,Float64}()
+# LevelSetMethods.meshgen!(msh,ls)
+# plot(msh)
 
-# Forward  euler
-integrator = ForwardEuler()
-eq = LevelSetEquation(;terms,integrator,state=deepcopy(ϕ₀),t=0,cfl=0.2)
-@time integrate!(eq,1)
-plot!(fig,eq,lc=:blue)
-
-# Low storage RK integrator
-integrator = RKLM2()
-eq = LevelSetEquation(;terms,integrator,state=deepcopy(ϕ₀),t=0)
-@time integrate!(eq,1)
-plot!(fig,eq,lc=:red,m=:x)
-
-# anim = @animate for n ∈ 0:100
-#     tf = 0.02*n
-#     integrate!(eq,tf)
-#     plot(eq)
-# end
-# gif(anim, "test.gif")
+# solve
+integrator = RK2()
+eq = LevelSetEquation(;terms,integrator,levelset=deepcopy(ϕ),t=0,cfl=0.5,boundary_condition=bc)
+anim = @animate for n ∈ 0:100
+    tf = 0.05*n
+    integrate!(eq,tf)
+    plot(eq)
+end
+gif(anim, "test.gif")
