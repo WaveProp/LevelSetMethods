@@ -6,3 +6,5 @@ using LevelSetMethods
 @safetestset "Level set" begin include("levelsetentity_test.jl") end
 
 @safetestset "Derivatives" begin include("derivatives_test.jl") end
+
+@safetestset "Mesh generation" begin include("meshgen_test.jl") end

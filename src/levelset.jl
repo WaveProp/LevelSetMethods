@@ -26,6 +26,8 @@ end
 
 bounding_box(ent::LevelSet) = ent.U
 ambient_dimension(ent::LevelSet) = ambient_dimension(bounding_box(ent))
+levelset_function(ent::LevelSet) = ent.f
+levelset_sign(ent::LevelSet) = ent.s
 
 function LevelSet(f, s::Int, U::HyperRectangle)
     if s == 0
