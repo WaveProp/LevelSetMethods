@@ -1,3 +1,8 @@
+#=
+    Implementation of methods required to generate conforming elements from a
+    level-set by recursive subdivision and one-dimensional root-finding.
+=#
+
 @enum CellType empty_cell whole_cell cut_cell
 
 abstract type AbstractLevelSetCell{N,T} end
@@ -7,7 +12,7 @@ cell_type(Ω::AbstractLevelSetCell) = Ω.celltype
 """
     MultiLevelSetCell{N,T} <: AbstractLevelSetCell{N,T}
 
-Domain defined by
+TODO: document this
 """
 struct MultiLevelSetCell{N,T} <: AbstractLevelSetCell{N,T}
     Ψ::Vector{Function}

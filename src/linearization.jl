@@ -159,14 +159,13 @@ function Base.:^(l::GradientDual, p::Integer)
     end
 end
 
-# TODO: add cos/sin
+# TODO: add cos/sin?
 
 """
     bound(f,rec::HyperRectangle)
 
-Return an upper bound `δ` such that `|f(x) - f(center(rec))| ≤ δ` for `x ∈ rec`.
-By default, the upper bound is computed using a bounded [`LinearizationDual`](@ref) of `f`
-on `rec`.
+Return bounds `(lb,ub)` such that `lb ≤ f(x) ≤ ub` for `x ∈ rec`. By default,
+bounds are computed using a bounded [`LinearizationDual`](@ref) of `f` on `rec`.
 
 This method can be overloaded for specific types `typeof(f)` if a more efficient
 way of computing the bound is known (e.g. if `f` is affine).
@@ -174,15 +173,6 @@ way of computing the bound is known (e.g. if `f` is affine).
 function bound(f, rec::HyperRectangle{D}) where {D}
     f̂ = linearization(f, rec)
     bound(f̂)
-end
-
-#
-function approximate_bound(f::Function, rec::HyperRectangle{D}, n=10) where {D}
-    sz = ntuple(i -> n, D)
-    msh = UniformCartesianMesh(rec, sz)
-    iter = NodeIterator(msh)
-    fmin, fmax = extrema(f, iter)
-    return fmin,fmax
 end
 
 # HACK: automatic definition of gradient as required by this package (i.e. as an SVector
@@ -196,7 +186,8 @@ end
 
 half_width(l::LinearizationDual) = half_width(domain(l))
 
-bound(x::Number) = (x, x)
+bound(x::Number,rec=nothing) = (x, x)
+
 function bound(l::LinearizationDual)
     α = val(l)
     δ = half_width(l)
@@ -228,10 +219,10 @@ function _result_domain(u::LinearizationDual{N,T},v::LinearizationDual{N,T}) whe
     # HACK: the zero rec is used when building one(::Type{LinearizationDual})
     # and zero(::Type{LinearizationDual}), so we must check those before
     # asserting equality
-    rec = HyperRectangle(svector(i->zero(T),N),svector(i->zero(T),N))
-    if domain(u) == rec
+    zero_rec = HyperRectangle(svector(i->zero(T),N),svector(i->zero(T),N))
+    if domain(u) == zero_rec
         return domain(v)
-    elseif domain(v) == rec
+    elseif domain(v) == zero_rec
         return domain(u)
     else
         @assert domain(u) == domain(v) "domains must be identical"

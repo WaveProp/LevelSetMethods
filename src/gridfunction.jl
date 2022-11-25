@@ -1,81 +1,62 @@
 """
     struct CartesianGridFunction{N,T,V}
 
-A function defined by discrete values on a the nodes of a `UniformCartesianMesh`.
+A function `f : ℝᴺ → V` defined by discrete values on the nodes of a
+`UniformCartesianMesh`. The `order` parameter specifies the polynomial order of
+the interpolation scheme.
 """
-struct CartesianGridFunction{N,T,V} <: AbstractArray{V,N}
+struct CartesianGridFunction{N,T,V}
     vals::Array{V,N}
-    mesh::UniformCartesianMesh{N,T}
+    vals_mesh::UniformCartesianMesh{N,T} # the mesh where `vals` are given
+    els_mesh::UniformCartesianMesh{N,T}  # mesh for the elements2
+    order::Int
 end
 
-mesh(f::CartesianGridFunction) = f.mesh
+mesh(f::CartesianGridFunction) = f.els_mesh
 vals(f::CartesianGridFunction) = f.vals
 Base.step(f::CartesianGridFunction, args...) = step(mesh(f), args...)
 ambient_dimension(f::CartesianGridFunction{N}) where {N} = N
 
-# AbstractArray interface
-Base.size(f::CartesianGridFunction) = size(vals(f))
-Base.getindex(f::CartesianGridFunction, args...) = getindex(vals(f), args...)
-Base.setindex!(f::CartesianGridFunction, args...) = setindex!(vals(f), args...)
-Base.eltype(f::CartesianGridFunction) = eltype(vals(f))
-
 domain(f::CartesianGridFunction) = domain(mesh(f))
 
-function CartesianGridFunction(f::Function, msh::UniformCartesianMesh)
-    vals = [f(x) for x in NodeIterator(msh)]
-    CartesianGridFunction(vals, msh)
+function CartesianGridFunction(f::Function, U::HyperRectangle{N,T}; step,
+                               order=1) where {N,T}
+    vals_mesh = UniformCartesianMesh(U; step)
+    # resize mesh so that it is divisible by order
+    sz = ceil.(Int, size(vals_mesh) ./ order) .* order
+    vals_mesh = UniformCartesianMesh(U, sz)
+    vals = [f(x) for x in nodes(vals_mesh)]
+    els_mesh = UniformCartesianMesh(U, div.(sz, order))
+    return CartesianGridFunction(vals, vals_mesh, els_mesh, order)
 end
 
-function (f::CartesianGridFunction{N})(x::SVector{N}) where {N}
-    @assert N == 2
-    m = mesh(f)
-    T = eltype(f)
-    I = element_index_for_point(x, m)
-    p = interpolant(f, I, LagrangeSquare{4,T})
-    # p     = interpolant(f,I,LagrangeTriangle{6,T})
-    return p(x)
+function preallocate_interpolant(f::CartesianGridFunction{N,T,V}) where {N,T,V}
+    nodes1d = ntuple(i -> collect(range(0, 1, f.order + 1)), N)
+    p̂ = TensorLagInterp(zeros(V, ntuple(i -> f.order + 1, N)), nodes1d)
+    return p̂
 end
 
-function interpolant(f::CartesianGridFunction, I, ::Type{<:LagrangeSquare{4}})
-    # TODO: properly implement other interpolants
-    m = mesh(f)
-    els = ElementIterator(m)
-    rec = els[I]
-    I1, I2, I3, I4 = I, I + CartesianIndex(1, 0), I + CartesianIndex(1, 1), I + CartesianIndex(0, 1)
-    vals = SVector(f[I1], f[I2], f[I3], f[I4])
-    p̂ = LagrangeSquare(vals)
-    p = (x) -> begin
-        x̂ = (x - low_corner(rec)) ./ width(rec) # normalized coordinates
-        p̂(x̂)
-    end
-    return p
+function interpolant!(p̂::TensorLagInterp{N}, f::CartesianGridFunction{N},
+                      I::CartesianIndex{N}) where {N}
+    p = f.order
+    els = ElementIterator(f.els_mesh)
+    U = els[I]
+    idxs = CartesianIndices(ntuple(N) do d
+                                return ((I[d] - 1) * p + 1):(I[d] * p + 1)
+                            end)
+    copy!(p̂.vals, f.vals[idxs])
+    xl = low_corner(U)
+    w = width(U)
+    return U, (x) -> p̂((x - xl) ./ w)
+end
+function interpolant(f::CartesianGridFunction{N}, I::CartesianIndex{N}) where {N}
+    p̂ = preallocate_interpolant(f)
+    return interpolant!(p̂, f, I)
 end
 
-function interpolant(f::CartesianGridFunction, I, ::Type{<:LagrangeTriangle{3}})
-    m = mesh(f)
-    els = ElementIterator(m)
-    rec = els[I]
-    I1, I2, I3 = I, I + CartesianIndex(1, 0), I + CartesianIndex(0, 1)
-    vals = SVector(f[I1], f[I2], f[I3])
-    p̂ = LagrangeTriangle(vals)
-    p = (x) -> begin
-        x̂ = (x - low_corner(rec)) ./ width(rec) # normalized coordinates in [0,1] × [0,1]
-        p̂(x̂)
-    end
-    return p
-end
-
-function interpolant(f::CartesianGridFunction, I, ::Type{<:LagrangeTriangle{6}})
-    m = mesh(f)
-    els = ElementIterator(m)
-    rec = els[I]
-    I1, I2, I3 = I, I + CartesianIndex(2, 0), I + CartesianIndex(0, 2)
-    I4, I5, I6 = I + CartesianIndex(1, 0), I + CartesianIndex(1, 1), I + CartesianIndex(0, 1)
-    vals = SVector(f[I1], f[I2], f[I3], f[I4], f[I5], f[I6])
-    p̂ = LagrangeTriangle(vals)
-    p = (x) -> begin
-        x̂ = (x - low_corner(rec)) ./ width(rec) ./ 2 # normalized coordinates in [0,1] × [0,1]
-        p̂(x̂)
-    end
-    return p
+function interpolants(f::CartesianGridFunction)
+    nodes1d = ntuple(i -> collect(range(0, 1, f.order + 1)), N)
+    p̂ = TensorLagInterp(zeros(V, ntuple(i -> f.order + 1, N)), nodes1d)
+    els = ElementIterator(f.els_mesh)
+    return (interpolant!(p̂, f, I) for I in CartesianIndices(els))
 end

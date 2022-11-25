@@ -1,10 +1,18 @@
 """
-    LevelSet <: AbstractEntity
+    struct LevelSet <: AbstractEntity
 
 A geometrical entity implicitly represented through a function `f : ℝᵈ → ℝ`. The
-underlying region is given by `Ω = {𝐱 ∈ U : s*f(𝐱)>0}`, for `s ∈ {+1,-1}` (i.e. a
-volume), and by `Γ = {𝐱 ∈ U : f(𝐱)=0}` (i.e. a surface) if `s=0`, where `U` is
-a `HyperRectangle`.
+underlying region is given by `Ω = {𝐱 ∈ U : s*f(𝐱)>0}`, for `s ∈ {+1,-1}`
+(i.e. a volume), and by `Γ = {𝐱 ∈ U : f(𝐱)=0}` (i.e. a surface) if `s=0`,
+where `U` is a `HyperRectangle` used to provide a `bounding_box` for the domain.
+
+```jldoctest
+using LevelSetMethods
+box = HyperRectangle((-2,-2),(2,2))
+# create a disk of radius one
+f = x -> x[1]^2 + x[2]^2 - 1
+Ω = LevelSet(f,box)
+```
 """
 struct LevelSet <: AbstractEntity
     dim::UInt8 # geometrical dimension
@@ -29,7 +37,7 @@ ambient_dimension(ent::LevelSet) = ambient_dimension(bounding_box(ent))
 levelset_function(ent::LevelSet) = ent.f
 levelset_sign(ent::LevelSet) = ent.s
 
-function LevelSet(f, s::Int, U::HyperRectangle)
+function LevelSet(f, U::HyperRectangle, s=-1)
     if s == 0
         dim = ambient_dimension(U) - 1
         tag = new_tag(dim)
@@ -38,7 +46,7 @@ function LevelSet(f, s::Int, U::HyperRectangle)
     else
         dim = ambient_dimension(U)
         tag = new_tag(dim)
-        bnd = LevelSet(f, 0, U)
+        bnd = LevelSet(f, U, 0)
         return LevelSet(dim, tag, f, s, U, bnd)
     end
 end
@@ -52,13 +60,21 @@ end
 
 # TODO: implement other set operatos
 
-struct DiscreteLevelSet <: AbstractEntity
+"""
+    struct CartesianLevelSet <: AbstractEntity
+
+Similar to [`LevelSet`](@ref), but the underlying function `f` is a
+`CartesianGridFunction`, and therefore given by values on a (discrete) grid.
+
+Unlike a `LevelSet`, a `CartesianLevelSet` can be evolved in time.
+"""
+struct CartesianLevelSet <: AbstractEntity
     dim::UInt8 # geometrical dimension
     tag::Int
     f::CartesianGridFunction
     s::Int
-    boundary::Union{DiscreteLevelSet,Nothing}
-    function DiscreteLevelSet(d::Integer, t::Integer, f, s, bnd)
+    boundary::Union{CartesianLevelSet,Nothing}
+    function CartesianLevelSet(d::Integer, t::Integer, f, s, bnd)
         @assert (s == 0 || s == -1 || s == 1) "s must be either 0, -1 or 1"
         ent = new(d, t, f, s, bnd)
         # every entity gets added to a global variable ENTITIES so that we can
@@ -69,63 +85,50 @@ struct DiscreteLevelSet <: AbstractEntity
     end
 end
 
-function DiscreteLevelSet(f::CartesianGridFunction, s::Int)
+function CartesianLevelSet(f::CartesianGridFunction, s::Int)
     U = domain(f)
     if s == 0
         dim = ambient_dimension(U) - 1
         tag = new_tag(dim)
         bnd = nothing
-        return DiscreteLevelSet(dim, tag, f, s, bnd)
+        return CartesianLevelSet(dim, tag, f, s, bnd)
     else
         dim = ambient_dimension(U)
         tag = new_tag(dim)
-        bnd = DiscreteLevelSet(f, 0)
-        return DiscreteLevelSet(dim, tag, f, s, bnd)
+        bnd = CartesianLevelSet(f, 0)
+        return CartesianLevelSet(dim, tag, f, s, bnd)
     end
 end
 
-function DiscreteLevelSet(f::Function,msh,s=-1)
-    g = CartesianGridFunction(f,msh)
-    return DiscreteLevelSet(g,s)
+function CartesianLevelSet(f::Function, U, s=-1; step, order)
+    fc = CartesianGridFunction(f, U; step, order)
+    return CartesianLevelSet(fc, s)
 end
 
-(ϕ::DiscreteLevelSet)(x) = ϕ.f(x)
+"""
+    CartesianLevelSet(f::Function, U, s=-1; step, order)
+    CartesianLevelSet(f::LevelSet; step, order)
 
-vals(ϕ::DiscreteLevelSet) = vals(ϕ.f)
-mesh(ϕ::DiscreteLevelSet) = mesh(ϕ.f)
-bounding_box(ent::DiscreteLevelSet) = domain(mesh(ent))
-ambient_dimension(ent::DiscreteLevelSet) = ambient_dimension(bounding_box(ent))
-Base.step(ϕ::DiscreteLevelSet,args...) = step(ϕ.f,args...)
-Base.size(ϕ::DiscreteLevelSet) = size(ϕ.f)
-Base.getindex(ϕ::DiscreteLevelSet, args...) = getindex(ϕ.f, args...)
-Base.setindex!(ϕ::DiscreteLevelSet, args...) = setindex!(ϕ.f, args...)
+Construct a discrete level-set on a grid of size `step` and domain `U`. The
+`order` keyword prescribes the interpolation order on the elements of the
+generated mesh.
+"""
+function CartesianLevelSet(ls::LevelSet; step, order)
+    U = bounding_box(ls)
+    f = levelset_function(ls)
+    s = levelset_sign(ls)
+    return CartesianLevelSet(f, U, s; step, order)
+end
+
+(ϕ::CartesianLevelSet)(x) = ϕ.f(x)
+
+vals(ϕ::CartesianLevelSet) = vals(ϕ.f)
+mesh(ϕ::CartesianLevelSet) = mesh(ϕ.f)
+bounding_box(ent::CartesianLevelSet) = domain(mesh(ent))
+ambient_dimension(ent::CartesianLevelSet) = ambient_dimension(bounding_box(ent))
+Base.step(ϕ::CartesianLevelSet, args...) = step(ϕ.f, args...)
+Base.size(ϕ::CartesianLevelSet) = size(ϕ.f)
+Base.getindex(ϕ::CartesianLevelSet, args...) = getindex(ϕ.f, args...)
+Base.setindex!(ϕ::CartesianLevelSet, args...) = setindex!(ϕ.f, args...)
 
 # TODO: implement something similar to "simple_shapes" of parametric surfaces
-
-
-# recipes for Plots
-@recipe function f(ls::DiscreteLevelSet)
-    ϕ = ls.f
-    s = ls.s
-    N = ambient_dimension(ϕ)
-    if N == 2 # 2d contour plot
-        if s == 0
-            seriestype --> :contour
-        else
-            seriestype --> :contourf
-        end
-        levels --> [0,0]
-        aspect_ratio --> :equal
-        colorbar --> false
-        # seriescolor --> :black
-        m = mesh(ϕ)
-        # Note: the vals of ϕ need be transposed because contour expects the
-        # matrix to have rows representing the x vals and columns expecting
-        # the y value.
-        xgrid = grids(m,1)
-        ygrid = grids(m,2)
-        return xgrid,ygrid,-transpose(vals(ϕ))
-    else
-        notimplemented()
-    end
-end

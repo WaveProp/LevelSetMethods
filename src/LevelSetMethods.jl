@@ -12,15 +12,19 @@ import WavePropBase:
     UniformCartesianMesh,
     GenericMesh,
     ElementIterator,
+    TensorLagInterp,
     NodeIterator,
     LagrangeSquare,
     LagrangeTriangle,
     ParametricElement,
     ReferenceHyperCube,
+    PolynomialSpace,
+    monomial_basis,
     mesh,
     ent2tags,
     domain,
     grids,
+    nodes,
     element_index_for_point,
     vals,
     ambient_dimension,
@@ -39,23 +43,27 @@ import WavePropBase:
     decrement_index,
     meshgen
 
-include("boundaryconditions.jl")
+# static functionality
 include("gridfunction.jl")
 include("levelset.jl")
 include("linearization.jl")
 include("meshgen.jl")
-include("derivatives.jl")
-include("timestepping.jl")
-include("levelsetequation.jl")
-# include("meshgen.jl")
+
+# dynamic functionality
+# include("boundaryconditions.jl")
+# include("derivatives.jl")
+# include("timestepping.jl")
+# include("levelsetequation.jl")
 
 export
+    HyperRectangle,
     LevelSetEquation,
     LevelSet,
-    DiscreteLevelSet,
+    CartesianLevelSet,
     CartesianGridFunction,
     PeriodicBC,
     AdvectionTerm,
+    CurvatureTerm,
     Upwind,
     WENO5,
     ForwardEuler,
