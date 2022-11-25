@@ -175,11 +175,12 @@ function bound(f, rec::HyperRectangle{D}) where {D}
     bound(f̂)
 end
 
-# HACK: automatic definition of gradient as required by this package (i.e. as an SVector
-# of functions). Maybe not the most efficient one, but does not seem to affect
-# the performance in any significant way. A better way could be to get the
-# partial independently
-function gradient(ϕ,::Val{D}) where {D}
+# HACK: to have the partial derivatives as SVector of functions we simply wrap
+# an ntuple around the gradient function. Not the most efficient way, but does
+# not seem to affect the performance in any significant way. A better way could
+# be to get the partial independently through autodiff, but this would require
+# further changes to the code used in gradient.
+function partials(ϕ,::Val{D}) where {D}
     f = (x) -> gradient(ϕ,x)
     svector(i-> x -> f(x)[i],D)
 end

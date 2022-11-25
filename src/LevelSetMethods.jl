@@ -25,6 +25,7 @@ import WavePropBase:
     domain,
     grids,
     nodes,
+    boundary,
     element_index_for_point,
     vals,
     ambient_dimension,
@@ -69,6 +70,7 @@ export
     ForwardEuler,
     RK2,
     integrate!,
-    meshgen
+    meshgen,
+    boundary
 
 end # module

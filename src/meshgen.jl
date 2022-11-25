@@ -177,12 +177,13 @@ end
 Base.@kwdef struct Parameters
     maxdepth::Int = 20
     maxslope::Float64 = 10
+    meshsize::Float64 = Inf
 end
 
-function meshgen(ls::LevelSet; maxdepth=20, maxslope=10)
+function meshgen(ls::LevelSet; maxdepth=20, maxslope=10, meshsize=Inf)
     N   = ambient_dimension(ls)
     msh = GenericMesh{N,Float64}()
-    p   = Parameters(maxdepth, maxslope)
+    p   = Parameters(maxdepth, maxslope, meshsize)
     meshgen!(msh,ls,p)
 end
 
@@ -192,26 +193,29 @@ function meshgen!(msh::GenericMesh, ls::LevelSet, p::Parameters)
     V = SVector{N,Float64}
     D = ReferenceHyperCube{Int(geometric_dimension(ls))}
     ϕ = levelset_function(ls)
-    ∇ϕ = gradient(ϕ, Val(N))
+    ∇ϕ = partials(ϕ, Val(N))
     s = levelset_sign(ls)
     U = bounding_box(ls)
-    root = MultiLevelSetCell([ϕ], [∇ϕ], [s], U)
-    surf = s==0
-    level = 0
-    maps = _meshgen(root, surf, level, p)
-    # sort elements by type for the given entity
     edict = msh.elements
     e2t   = Dict{DataType,Vector{Int}}()
-    for τ in maps
-        el = ParametricElement{D,V}(τ)
-        E  = typeof(el)
-        els = get!(edict,E,Vector{E}())
-        tags = get!(e2t,E,Int[])
-        push!(els, el)
-        push!(tags, length(els))
+    # split U into boxes of size `meshsize`, then work on each subdomain
+    for Uᵢ in ElementIterator(UniformCartesianMesh(U;step=p.meshsize))
+        root = MultiLevelSetCell([ϕ], [∇ϕ], [s], Uᵢ)
+        surf = s==0
+        level = 0
+        maps = _meshgen(root, surf, level, p)
+        # sort elements by type for the given entity
+        for τ in maps
+            el = ParametricElement{D,V}(τ)
+            E  = typeof(el)
+            els = get!(edict,E,Vector{E}())
+            tags = get!(e2t,E,Int[])
+            push!(els, el)
+            push!(tags, length(els))
+        end
     end
     # store maps in the mesh
-    haskey(ent2tags(msh),ls) && (@warn "remeshing $ls")
+    haskey(ent2tags(msh),ls) && (@warn "remeshed $ls")
     ent2tags(msh)[ls] = e2t
     return msh
 end
