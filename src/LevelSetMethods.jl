@@ -18,6 +18,7 @@ import WavePropBase:
     LagrangeTriangle,
     ParametricElement,
     ReferenceHyperCube,
+    SType,
     PolynomialSpace,
     monomial_basis,
     mesh,

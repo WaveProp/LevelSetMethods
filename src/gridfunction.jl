@@ -54,7 +54,7 @@ function interpolant(f::CartesianGridFunction{N}, I::CartesianIndex{N}) where {N
     return interpolant!(p̂, f, I)
 end
 
-function interpolants(f::CartesianGridFunction)
+function interpolants(f::CartesianGridFunction{N,T,V}) where {N,T,V}
     nodes1d = ntuple(i -> collect(range(0, 1, f.order + 1)), N)
     p̂ = TensorLagInterp(zeros(V, ntuple(i -> f.order + 1, N)), nodes1d)
     els = ElementIterator(f.els_mesh)

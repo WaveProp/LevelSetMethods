@@ -1,3 +1,5 @@
+abstract type AbstractLevelSet <: AbstractEntity end
+
 """
     struct LevelSet <: AbstractEntity
 
@@ -14,7 +16,7 @@ f = x -> x[1]^2 + x[2]^2 - 1
 Ω = LevelSet(f,box)
 ```
 """
-struct LevelSet <: AbstractEntity
+struct LevelSet <: AbstractLevelSet
     dim::UInt8 # geometrical dimension
     tag::Int
     f::Function
@@ -68,7 +70,7 @@ Similar to [`LevelSet`](@ref), but the underlying function `f` is a
 
 Unlike a `LevelSet`, a `CartesianLevelSet` can be evolved in time.
 """
-struct CartesianLevelSet <: AbstractEntity
+struct CartesianLevelSet <: AbstractLevelSet
     dim::UInt8 # geometrical dimension
     tag::Int
     f::CartesianGridFunction
@@ -122,6 +124,8 @@ end
 
 (ϕ::CartesianLevelSet)(x) = ϕ.f(x)
 
+levelset_function(ls::CartesianLevelSet) = ls.f
+levelset_sign(ls::CartesianLevelSet) = ls.s
 vals(ϕ::CartesianLevelSet) = vals(ϕ.f)
 mesh(ϕ::CartesianLevelSet) = mesh(ϕ.f)
 bounding_box(ent::CartesianLevelSet) = domain(mesh(ent))
@@ -132,3 +136,11 @@ Base.getindex(ϕ::CartesianLevelSet, args...) = getindex(ϕ.f, args...)
 Base.setindex!(ϕ::CartesianLevelSet, args...) = setindex!(ϕ.f, args...)
 
 # TODO: implement something similar to "simple_shapes" of parametric surfaces
+
+function interpolants(ls::LevelSet)
+    ((bounding_box(ls),levelset_function(ls)),)
+end
+
+function interpolants(ls::CartesianLevelSet)
+    interpolants(levelset_function(ls))
+end
