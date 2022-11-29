@@ -142,5 +142,5 @@ function interpolants(ls::LevelSet)
 end
 
 function interpolants(ls::CartesianLevelSet)
-    interpolants(levelset_function(ls))
+    monomial_interpolants(levelset_function(ls))
 end

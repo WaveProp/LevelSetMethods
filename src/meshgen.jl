@@ -196,7 +196,6 @@ function meshgen!(msh::GenericMesh, ls::AbstractLevelSet, p::Parameters)
     e2t   = Dict{DataType,Vector{Int}}()
     # loop over the C∞ interpolants of `ls`
     for (U,f) in interpolants(ls)
-        @info U,f
         ∇f = partials(f, Val(N))
         # split U into boxes of size `meshsize`, then work on each subdomain
         for Uᵢ in ElementIterator(UniformCartesianMesh(U;step=p.meshsize))

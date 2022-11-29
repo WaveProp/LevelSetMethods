@@ -46,6 +46,7 @@ import WavePropBase:
     meshgen
 
 # static functionality
+include("bernsteinpolynomials.jl")
 include("gridfunction.jl")
 include("levelset.jl")
 include("linearization.jl")

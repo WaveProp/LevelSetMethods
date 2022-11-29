@@ -142,17 +142,22 @@ function gradient(f, x::SVector)
 end
 
 # power
-function Base.:^(l::LinearizationDual, p::Integer)
-    if p == 1
+function Base.:^(l::LinearizationDual{D,T}, p::Integer) where {D,T}
+    @assert p ≥ 0 "only positive integer powers are supported: p=$p"
+    if p == 0
+        one(LinearizationDual{D,T})
+    elseif p == 1
         return l
     else
         l * (l^(p - 1))
     end
 end
 
-function Base.:^(l::GradientDual, p::Integer)
-    @assert p ≥ 1
-    if p == 1
+function Base.:^(l::GradientDual{N,T}, p::Integer) where {N,T}
+    @assert p ≥ 0 "only positive integer powers are supported: p=$p"
+    if p == 0
+        one(GradientDual{N,T})
+    elseif p == 1
         return l
     else
         l * (l^(p - 1))
@@ -213,6 +218,12 @@ function Base.zero(::Type{LinearizationDual{N, T}}) where {N,T}
     ϵ = zero(T)
     rec = HyperRectangle(β,β)
     LinearizationDual(α,β,ϵ,rec)
+end
+
+function Base.one(::Type{GradientDual{N, T}}) where {N,T}
+    α = one(T)
+    β = svector(i->zero(T),N)
+    GradientDual(α,β)
 end
 
 # domain of operation between two linearizations
