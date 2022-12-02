@@ -10,6 +10,7 @@ import WavePropBase:
     AbstractEntity,
     HyperRectangle,
     UniformCartesianMesh,
+    NystromMesh,
     GenericMesh,
     ElementIterator,
     TensorLagInterp,
@@ -22,6 +23,7 @@ import WavePropBase:
     PolynomialSpace,
     monomial_basis,
     mesh,
+    degree,
     ent2tags,
     domain,
     grids,
@@ -43,13 +45,13 @@ import WavePropBase:
     global_add_entity!,
     increment_index,
     decrement_index,
-    meshgen
+    meshgen,
+    integrate
 
 # static functionality
 include("bernsteinpolynomials.jl")
 include("gridfunction.jl")
 include("levelset.jl")
-include("linearization.jl")
 include("meshgen.jl")
 
 # dynamic functionality
@@ -60,6 +62,7 @@ include("meshgen.jl")
 
 export
     HyperRectangle,
+    NystromMesh,
     LevelSetEquation,
     LevelSet,
     CartesianLevelSet,
@@ -71,8 +74,9 @@ export
     WENO5,
     ForwardEuler,
     RK2,
-    integrate!,
+    integrate,
     meshgen,
-    boundary
+    boundary,
+    power2bernstein
 
 end # module

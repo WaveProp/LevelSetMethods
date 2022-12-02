@@ -13,7 +13,7 @@ f = x -> x[1]^2 + x[2]^2 - 1
 @test WPB.ambient_dimension(WPB.boundary(Ω)) == 2
 @test WPB.geometric_dimension(WPB.boundary(Ω)) == 1
 
-Ωc = CartesianLevelSet(Ω;step=0.1,order=1)
+Ωc = CartesianLevelSet(Ω;meshsize=0.1,order=4)
 @test WPB.ambient_dimension(Ωc) == 2
 @test WPB.geometric_dimension(Ωc) == 2
 

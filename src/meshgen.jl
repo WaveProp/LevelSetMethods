@@ -3,48 +3,76 @@
     level-set by recursive subdivision and one-dimensional root-finding.
 =#
 
+function meshgen(ls::LevelSet; maxdepth=20, maxslope=10, meshsize, order=1)
+    meshgen(CartesianLevelSet(ls; meshsize, order=order);maxdepth, maxslope)
+end
+
+function meshgen(ls::CartesianLevelSet; maxdepth=20, maxslope=10)
+    N = ambient_dimension(ls)
+    msh = GenericMesh{N,Float64}()
+    p   = (;maxdepth,maxslope)
+    return meshgen!(msh, ls, p)
+end
+
+function meshgen!(msh::GenericMesh, ls::CartesianLevelSet, p::NamedTuple)
+    N = ambient_dimension(ls)
+    V = SVector{N,Float64}
+    D = ReferenceHyperCube{Int(geometric_dimension(ls))} # reference domain
+    s = levelset_sign(ls)
+    edict = msh.elements
+    e2t = Dict{DataType,Vector{Int}}()
+    # loop over the C∞ interpolants of `ls`
+    for f in bernstein_interpolants(ls)
+        root = MultiBernsteinCell([f], [s])
+        surf = s == 0
+        level = 0
+        maps  = _meshgen(root, surf, level, p)
+        # sort elements by type for the given entity
+        for τ in maps
+            el = ParametricElement{D,V}(τ)
+            E = typeof(el)
+            els = get!(edict, E, Vector{E}())
+            tags = get!(e2t, E, Int[])
+            push!(els, el)
+            push!(tags, length(els))
+        end
+    end
+    # store maps in the mesh
+    haskey(ent2tags(msh), ls) && (@warn "remeshed $ls")
+    ent2tags(msh)[ls] = e2t
+    return msh
+end
+
 @enum CellType empty_cell whole_cell cut_cell
 
-abstract type AbstractLevelSetCell{N,T} end
-
-cell_type(Ω::AbstractLevelSetCell) = Ω.celltype
-
-"""
-    MultiLevelSetCell{N,T} <: AbstractLevelSetCell{N,T}
-
-TODO: document this
-"""
-struct MultiLevelSetCell{N,T} <: AbstractLevelSetCell{N,T}
-    Ψ::Vector{Function}
-    ∇Ψ::Vector{SVector{N,Function}}
+struct MultiBernsteinCell{N,T}
+    Ψ::Vector{BernsteinPolynomial{N,T}}
+    ∇Ψ::Vector{SVector{N,BernsteinPolynomial{N,T}}}
     signs::Vector{Int}
     rec::HyperRectangle{N,T}
     celltype::CellType
-    function MultiLevelSetCell(Ψ, ∇Ψ, signs, rec::HyperRectangle{N,T}) where {N,T}
+    function MultiBernsteinCell(Ψ::Vector{BernsteinPolynomial{N,T}}, signs) where {N,T}
+        @assert length(signs) == length(Ψ)
+        rec = domain(first(Ψ))
+        @assert all(ψ -> domain(ψ) == rec, Ψ)
+        ∇Ψ = map(partials, Ψ)
         ctype = _prune!(Ψ, ∇Ψ, rec, signs)
-        ctype == empty_cell && map(empty!, (Ψ, ∇Ψ, signs))
         return new{N,T}(Ψ, ∇Ψ, signs, rec::HyperRectangle{N,T}, ctype)
     end
 end
 
-function Base.split(Ω::MultiLevelSetCell)
-    Ψ = Ω.Ψ
-    ∇Ψ = Ω.∇Ψ
-    signs = Ω.signs
-    rec = Ω.rec
-    k = argmax(width(rec))
-    rec1, rec2 = split(rec, k)
-    Ω1 = MultiLevelSetCell(copy(Ψ), copy(∇Ψ), copy(signs), rec1)
-    Ω2 = MultiLevelSetCell(Ψ, copy(∇Ψ), copy(signs), rec2)
-    return Ω1, Ω2
+function MultiBernsteinCell(ψ::BernsteinPolynomial, s::Integer; kwargs...)
+    return MultiBernsteinCell([ψ], [s]; kwargs...)
 end
+
+cell_type(Ω::MultiBernsteinCell) = Ω.celltype
 
 """
     prune!(Ω)
 
 Prune the functions specifying the domain `Ω` and return the `CellType` of the domain.
 """
-function prune!(Ω::AbstractLevelSetCell)
+function prune!(Ω::MultiBernsteinCell)
     return _prune!(Ω.Ψ, Ω.∇Ψ, Ω.rec, Ω.signs)
 end
 
@@ -69,8 +97,8 @@ function _prune!(Ψ, ∇Ψ, rec, signs)
     return cut_cell
 end
 
-function cell_type(ψ, s, rec)
-    l, u = bound(ψ, rec)
+function cell_type(ψ::BernsteinPolynomial, s, rec)
+    l, u = bound(ψ)
     ψc = ψ(center(rec))
     l * u ≥ 0 || (return cut_cell)
     if s * ψc ≥ 0
@@ -82,39 +110,12 @@ function cell_type(ψ, s, rec)
     end
 end
 
-function restrict(Ω::MultiLevelSetCell{N,T}, k, surf) where {N,T}
-    Ψ = Ω.Ψ
-    ∇Ψ = Ω.∇Ψ
-    signs = Ω.signs
-    rec = Ω.rec
-    xc = center(rec)
-    Ψ̃ = empty(Ψ)
-    ∇Ψ̃ = SVector{N - 1,Function}[] # one dimensional lower, so one less derivative in grad
-    new_signs = empty(signs)
-    for (ψ, s, ∇ψ) in zip(Ψ, signs, ∇Ψ)
-        # why bound? dont we know that ∇Ψ[k] has a fixed sign on direction k?
-        # pos_neg = bound(∇ψ[k],rec)[1] > 0 ? 1 : -1
-        pos_neg = ∇ψ[k](xc) > 0 ? 1 : -1 # use sign?
-        ψL = lower_restrict(ψ, rec, k)
-        sL = sgn(pos_neg, s, surf, -1)
-        ∇ψL = lower_restrict_grad(∇ψ, rec, k)
-        ψU = upper_restrict(ψ, rec, k)
-        sU = sgn(pos_neg, s, surf, 1)
-        ∇ψU = upper_restrict_grad(∇ψ, rec, k)
-        append!(Ψ̃, (ψL, ψU))
-        append!(new_signs, (sL, sU))
-        append!(∇Ψ̃, (∇ψL, ∇ψU))
-    end
-    Ω̃ = MultiLevelSetCell(Ψ̃, ∇Ψ̃, new_signs, section(rec, k))
-    return Ω̃
-end
-
-function lower_restrict(ψ::Function, rec, k)
+function lower_restrict(ψ, rec, k)
     a = low_corner(rec)[k]
     return x -> ψ(insert(x, k, a))
 end
 
-function upper_restrict(ψ::Function, rec, k)
+function upper_restrict(ψ, rec, k)
     a = high_corner(rec)[k]
     return x -> ψ(insert(x, k, a))
 end
@@ -132,7 +133,49 @@ function upper_restrict_grad(∇ψ::SVector{N}, rec, k) where {N}
     return svector(d -> (x) -> ∇ψ′[d](insert(x, k, a)), N - 1)
 end
 
-function dim1mesh(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U)
+function Base.split(Ω::MultiBernsteinCell)
+    Ψ = Ω.Ψ
+    signs = Ω.signs
+    rec = Ω.rec
+    # split into left and right domains
+    k = argmax(width(rec))
+    Ψl = empty(Ψ)
+    Ψr = empty(Ψ)
+    for ψ in Ψ
+        ψl, ψr = split(ψ, k)
+        push!(Ψl, ψl)
+        push!(Ψr, ψr)
+    end
+    Ω1 = MultiBernsteinCell(Ψl, copy(signs))
+    Ω2 = MultiBernsteinCell(Ψr, copy(signs))
+    return Ω1, Ω2
+end
+
+function restrict(Ω::MultiBernsteinCell{N,T}, k, surf) where {N,T}
+    Ψ = Ω.Ψ
+    ∇Ψ = Ω.∇Ψ
+    signs = Ω.signs
+    rec = Ω.rec
+    xc = center(rec)
+    Ψ̃ = BernsteinPolynomial{N - 1,T}[]
+    ∇Ψ̃ = SVector{N - 1,BernsteinPolynomial{N - 1,T}}[] # one dimensional lower, so one less derivative in grad
+    new_signs = empty(signs)
+    for (ψ, s, ∇ψ) in zip(Ψ, signs, ∇Ψ)
+        # why bound? dont we know that ∇Ψ[k] has a fixed sign on direction k?
+        # pos_neg = bound(∇ψ[k],rec)[1] > 0 ? 1 : -1
+        pos_neg = ∇ψ[k](xc) > 0 ? 1 : -1 # use sign?
+        ψL = lower_restrict(ψ, k)
+        sL = sgn(pos_neg, s, surf, -1)
+        ψU = upper_restrict(ψ, k)
+        sU = sgn(pos_neg, s, surf, 1)
+        append!(Ψ̃, (ψL, ψU))
+        append!(new_signs, (sL, sU))
+    end
+    Ω̃ = MultiBernsteinCell(Ψ̃, new_signs)
+    return Ω̃
+end
+
+function dim1mesh(Ψ::Vector, signs::Vector{<:Integer}, L, U)
     roots = [L, U]
     for ψ in Ψ
         union!(roots, find_zeros(ψ, L, U))
@@ -149,7 +192,7 @@ function dim1mesh(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U)
     return Maps
 end
 
-function HDmesh(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U, τ, k, D)
+function HDmesh(Ψ::Vector, signs::Vector{<:Integer}, L, U, τ, k, D)
     roots = [_ -> L, _ -> U]
     x₀ = svector(_ -> 0.5, D - 1)
     x̂₀ = τ(x₀)
@@ -174,54 +217,7 @@ function HDmesh(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U, τ, k, D
     return Maps
 end
 
-Base.@kwdef struct Parameters
-    maxdepth::Int = 20
-    maxslope::Float64 = 10
-    meshsize::Float64 = Inf
-end
-
-function meshgen(ls::AbstractLevelSet; maxdepth=20, maxslope=10, meshsize=Inf)
-    N   = ambient_dimension(ls)
-    msh = GenericMesh{N,Float64}()
-    p   = Parameters(maxdepth, maxslope, meshsize)
-    meshgen!(msh,ls,p)
-end
-
-function meshgen!(msh::GenericMesh, ls::AbstractLevelSet, p::Parameters)
-    N = ambient_dimension(ls)
-    V = SVector{N,Float64}
-    D = ReferenceHyperCube{Int(geometric_dimension(ls))} # reference domain
-    s = levelset_sign(ls)
-    edict = msh.elements
-    e2t   = Dict{DataType,Vector{Int}}()
-    # loop over the C∞ interpolants of `ls`
-    for (U,f) in interpolants(ls)
-        ∇f = partials(f, Val(N))
-        # split U into boxes of size `meshsize`, then work on each subdomain
-        for Uᵢ in ElementIterator(UniformCartesianMesh(U;step=p.meshsize))
-            root = MultiLevelSetCell([f], [∇f], [s], Uᵢ)
-            surf = s==0
-            level = 0
-            maps = _meshgen(root, surf, level, p)
-            # sort elements by type for the given entity
-            for τ in maps
-                el = ParametricElement{D,V}(τ)
-                E  = typeof(el)
-                els = get!(edict,E,Vector{E}())
-                tags = get!(e2t,E,Int[])
-                push!(els, el)
-                push!(tags, length(els))
-            end
-        end
-    end
-    # store maps in the mesh
-    haskey(ent2tags(msh),ls) && (@warn "remeshed $ls")
-    ent2tags(msh)[ls] = e2t
-    return msh
-end
-
-function _meshgen(Ω::AbstractLevelSetCell{N,T}, surf, level,
-                   par::Parameters) where {N,T}
+function _meshgen(Ω::MultiBernsteinCell{N,T}, surf, level,p) where {N,T}
     rec = Ω.rec
     xc = center(rec)
     Ψ = Ω.Ψ
@@ -229,15 +225,6 @@ function _meshgen(Ω::AbstractLevelSetCell{N,T}, surf, level,
     signs = Ω.signs
     D = ambient_dimension(rec)
     @assert !surf || (D > 1)
-    if level ≥ par.maxdepth
-        @warn "Maximum depth reached: resorting to low-order approximation"
-        if surf
-            return [_ -> xc]
-        else
-            return [_ -> xc]
-        end
-    end
-
     ctype = cell_type(Ω)
     # check for limiting cases of empty or whole cells
     if ctype == empty_cell
@@ -247,6 +234,18 @@ function _meshgen(Ω::AbstractLevelSetCell{N,T}, surf, level,
             return Vector{Function}()
         else
             return [x -> x .* (high_corner(rec) .- low_corner(rec)) .+ low_corner(rec)]
+        end
+    end
+    # return if max level reached
+    if level ≥ p.maxdepth
+        if !isempty(Ψ)
+            @show first(Ψ).domain
+        end
+        @warn "Maximum depth $(p.maxdepth) reached: resorting to low-order approximation"
+        if surf
+            return [_ -> xc]
+        else
+            return [_ -> xc]
         end
     end
 
@@ -264,13 +263,13 @@ function _meshgen(Ω::AbstractLevelSetCell{N,T}, surf, level,
         all(bnds) do bnd
             return (prod(bnd[dim]) > 0) &&
                    (sum(bd -> maximum(abs, bd), bnd) / minimum(abs, bnd[dim]) <
-                    par.maxslope)
+                    p.maxslope)
         end
     end
     if !any(isvalid) # no valid direction so split
         Ω1, Ω2 = split(Ω)
-        Maps1 = _meshgen(Ω1, surf, level + 1, par)
-        Maps2 = _meshgen(Ω2, surf, level + 1, par)
+        Maps1 = _meshgen(Ω1, surf, level + 1, p)
+        Maps2 = _meshgen(Ω2, surf, level + 1, p)
         test = Vector{Function}()
         return append!(test, Maps1, Maps2)
     end
@@ -292,7 +291,7 @@ function _meshgen(Ω::AbstractLevelSetCell{N,T}, surf, level,
         end
     end
     Ω̃ = restrict(Ω, k, surf) # the D-1 dimensional domain
-    maps = _meshgen(Ω̃, false, level, par)
+    maps = _meshgen(Ω̃, false, level, p)
     Maps = Vector{Function}()
     for t in maps
         if surf
@@ -336,20 +335,6 @@ function sgn(m, s, surface, side)
     end
 end
 
-# utility functions
-function StaticArrays.insert(x̂::SVector{<:Any,<:LinearizationDual{N,T}}, k,
-                             y::T) where {N,T}
-    rec = domain(first(x̂))
-    ŷ = LinearizationDual(y, zero(SVector{N,T}), zero(T), rec)
-    return insert(x̂, k, ŷ)
-end
-
 function StaticArrays.insert(x::Real, k, y::Real)
     return insert(SVector(x), k, y)
-end
-
-function extrude(Rec::HyperRectangle{D,T}, k, l::T, u::T) where {D,T}
-    lb = low_corner(Rec)
-    ub = high_corner(Rec)
-    return HyperRectangle(insert(lb, k, l), insert(ub, k, u))
 end
