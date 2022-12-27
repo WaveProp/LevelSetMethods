@@ -13,7 +13,7 @@ where ``c_{i_1\\dots i_D}=\\texttt{coeffs}[i_1+1,\\dots,i_D+1]``, ``d_j=\\texttt
 ``l_j=\\texttt{low\\_corner(domain)}[j]``,
 ``r_j=\\texttt{high\\_corner(domain)}[j]``
 """
-struct BernsteinPolynomial{D,T}
+struct BernsteinPolynomial{D,T} <: Function
     coeffs::Array{T,D}
     domain::HyperRectangle{D,T}
 end
@@ -177,6 +177,16 @@ function Base.split(p::BernsteinPolynomial{D,T}, d::Integer, α=0.5) where {D,T}
     return p1, p2
 end
 
+@doc raw"""
+    rebase(a::Vector{<:Real}, l::Real, r::Real)
+
+Given the vector of coefficients `a` of a polynomial in monomial basis, 
+return the vector of coefficients `ã` in basis after an affine transform.
+
+```math
+\sum_{i=0}^{n-1}a[i+1]x^i = \sum_{i=0}^{n-1}\tilde{a}[i+1](\frac{x-l}{r-l})^i
+```
+"""
 function rebase(a::Vector{<:Real}, l::Real, r::Real)
     n = length(a)
     ã = copy(a)
@@ -280,3 +290,20 @@ function deCasteljau!(coeffs, d, t)
     return coeffs
 end
 deCasteljau(coeffs,d,t) = deCasteljau!(copy(coeffs),d,t)
+
+@doc raw"""
+    curvature(p::BernsteinPolynomial{D}, x::SVector{D})
+
+Calculate the curvature of the level-set of `p` at `x` by the following formula
+
+```math
+\kappa = \nabla\cdot\frac{\nabla p}{|\nabla p|} = \frac{\Delta p}{|\nabla p|} + \frac{\nabla^\perp p\nabla^2 p\nabla p}{|\nabla p|^3}
+```
+"""
+function curvature(p::BernsteinPolynomial{D}, x::SVector{D}) where {D}
+    ∇p = ForwardDiff.gradient(p, x)
+    Hp = ForwardDiff.hessian(p, x)
+    Np = norm(∇p)
+
+    tr(Hp)/Np - dot(∇p, Hp, ∇p)/Np^3
+end

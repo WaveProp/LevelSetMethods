@@ -3,6 +3,8 @@ module LevelSetMethods
 using LinearAlgebra
 using StaticArrays
 using Roots
+using ForwardDiff
+using FastGaussQuadrature
 using RecipesBase
 using Base.Threads: @threads, @spawn
 
@@ -14,6 +16,7 @@ import WavePropBase:
     GenericMesh,
     ElementIterator,
     TensorLagInterp,
+    QuadratureNode,
     NodeIterator,
     LagrangeSquare,
     LagrangeTriangle,
@@ -52,6 +55,7 @@ import WavePropBase:
 include("bernsteinpolynomials.jl")
 include("gridfunction.jl")
 include("levelset.jl")
+include("quadgen.jl")
 include("meshgen.jl")
 
 # dynamic functionality

@@ -67,3 +67,11 @@ function bernstein_interpolants(f::CartesianGridFunction{N,T,V}) where {N,T,V}
     els = ElementIterator(f.els_mesh)
     return (bernstein_interpolant(f, I, vandermond) for I in CartesianIndices(els))
 end
+
+element_index_for_point(x::SVector{N}, f::CartesianGridFunction{N}) where {N} = element_index_for_point(x, mesh(f))
+
+function curvature(f::CartesianGridFunction{N,T,V}, x::SVector{N}) where {N,T,V}
+    I = element_index_for_point(x, f)
+    p = bernstein_interpolant(f, I)
+    return curvature(p, x)
+end

@@ -149,3 +149,6 @@ end
 function bernstein_interpolants(ls::CartesianLevelSet)
     bernstein_interpolants(levelset_function(ls))
 end
+
+element_index_for_point(x::SVector, ls::CartesianLevelSet) = element_index_for_point(x, levelset_function(ls))
+curvature(ls::CartesianLevelSet, x::SVector) = curvature(levelset_function(ls), x)
