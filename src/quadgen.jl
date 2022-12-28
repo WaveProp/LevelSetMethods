@@ -195,6 +195,20 @@ function dim1quad(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U, x1d, w
     return nodes, weights
 end
 
+function tensorquad(rec::HyperRectangle{D}, x1d, w1d) where {D}
+    xl, xu = low_corner(rec), high_corner(rec)
+    μ      = prod(xu-xl)
+    nodes = map(Iterators.product(ntuple(i->x1d,D)...)) do x̂
+        # map reference nodes to rec
+        rec(SVector(x̂))
+    end |> vec
+    weights = map(Iterators.product(ntuple(i->w1d,D)...)) do ŵ
+        # scale reference weights
+        prod(ŵ)*μ
+    end |> vec
+    nodes, weights
+end
+
 function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {N,T}
     rec = Ω.rec
     xc  = center(rec)
