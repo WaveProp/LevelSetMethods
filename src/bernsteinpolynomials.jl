@@ -180,7 +180,7 @@ end
 @doc raw"""
     rebase(a::Vector{<:Real}, l::Real, r::Real)
 
-Given the vector of coefficients `a` of a polynomial in monomial basis, 
+Given the vector of coefficients `a` of a polynomial in monomial basis,
 return the vector of coefficients `ã` in the basis after an affine transform.
 
 ```math
@@ -244,7 +244,7 @@ function raise_degree(p::BernsteinPolynomial{D,T}, k::NTuple{D,Int}) where {D,T}
     n = size(coeffs(p))
     inds = CartesianIndices(ntuple(d->1:n[d],D))
     copyto!(C, inds, coeffs(p), inds)
-    for d in 1:D 
+    for d in 1:D
         for i in 1:k[d]-n[d]+1
             selectdim(C, d, 1+i:n[d]+i) .+= selectdim(C, d, i:n[d]+i-1)
         end
@@ -287,7 +287,7 @@ end
     end
 end
 
-# deCasteljau algorithm for splitting a Bernstein polynomial
+# deCasteljau algorithm for splitting a Bernstein polynomial (WIP)
 function deCasteljau!(coeffs, d, t)
     N = ndims(coeffs)
     sz = size(coeffs)
@@ -313,8 +313,6 @@ function deCasteljau!(coeffs, d, t)
     return coeffs
 end
 deCasteljau(coeffs,d,t) = deCasteljau!(copy(coeffs),d,t)
-
-
 
 @enum CellType empty_cell whole_cell cut_cell
 # Level set expressed by a Vector of BernsteinPolynomial

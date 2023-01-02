@@ -4,7 +4,6 @@ using LinearAlgebra
 using StaticArrays
 using Roots
 using ForwardDiff
-using FastGaussQuadrature
 using RecipesBase
 using Base.Threads: @threads, @spawn
 
@@ -16,6 +15,7 @@ import WavePropBase:
     GenericMesh,
     ElementIterator,
     TensorLagInterp,
+    GaussLegendre,
     QuadratureNode,
     NodeIterator,
     LagrangeSquare,
@@ -50,6 +50,7 @@ import WavePropBase:
     decrement_index,
     meshgen,
     integrate
+
 
 # static functionality
 include("bernsteinpolynomials.jl")

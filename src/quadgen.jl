@@ -1,5 +1,5 @@
 #=
-    Implementation of methods required to generate conforming elements from a
+    Implementation of methods required to generate quadratures from a
     level-set by recursive subdivision and one-dimensional root-finding.
 =#
 
@@ -15,9 +15,14 @@ function quadgen(ls::CartesianLevelSet; qorder=5, maxdepth=20, maxslope=10)
 end
 
 function quadgen!(qnodes, ls::CartesianLevelSet, p::NamedTuple)
-    x1d, w1d = gausslegendre(p.qorder)
-    x1d .= (x1d .+ 1) ./ 2
-    w1d .= w1d ./ 2
+    qrule = GaussLegendre(;order=p.qorder)
+    x1d,w1d = qrule()
+    x1d = [x[1] for x in x1d] |> Vector
+    w1d = [w[1] for w in w1d] |> Vector
+    # npts = ceil(Int,(p.qorder + 1)/2)
+    # x1d, w1d = gausslegendre(npts)
+    # x1d .= (x1d .+ 1) ./ 2
+    # w1d .= w1d ./ 2
     s = levelset_sign(ls)
     # loop over the C∞ interpolants of `ls`
     for f in bernstein_interpolants(ls)
@@ -25,13 +30,13 @@ function quadgen!(qnodes, ls::CartesianLevelSet, p::NamedTuple)
         surf = s == 0
         level = 0
         X, W  = _quadgen(root, surf, x1d, w1d, level, p)
-        for (x, w) in zip(X, W) 
+        for (x, w) in zip(X, W)
             n = ForwardDiff.gradient(f, x)
             n /= norm(n)
             κ = curvature(f, x)
             push!(qnodes, QuadratureNode(x, w, n, κ))
         end
-    end        
+    end
     return qnodes
 end
 
