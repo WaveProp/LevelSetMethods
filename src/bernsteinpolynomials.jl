@@ -181,7 +181,7 @@ end
     rebase(a::Vector{<:Real}, l::Real, r::Real)
 
 Given the vector of coefficients `a` of a polynomial in monomial basis, 
-return the vector of coefficients `ã` in basis after an affine transform.
+return the vector of coefficients `ã` in the basis after an affine transform.
 
 ```math
 \sum_{i=0}^{n-1}a[i+1]x^i = \sum_{i=0}^{n-1}\tilde{a}[i+1](\frac{x-l}{r-l})^i
@@ -212,7 +212,7 @@ end
 """
     power2bernstein(a::Array{<:Real,D}, U::HyperRectangle{D}) where{D}
 
-Convert a polynomial in power series into a Bernstein polynomial on `U` of degree `k`.
+Convert a polynomial in power series into a Bernstein polynomial on `U` of minimal degree.
 """
 function power2bernstein(a::Array{<:Real,D}, U::HyperRectangle{D}) where {D}
     k = size(a) .- 1
@@ -229,6 +229,29 @@ function power2bernstein(a::Array{<:Real,D}, U::HyperRectangle{D}) where {D}
     end
     return BernsteinPolynomial(b, U)
 end
+
+"""
+    raise_degree(p::BernsteinPolynomial{D,T}, k::NTuple{D,Int}) where {D,T}
+
+Raise the degree of the BernsteinPolynomial `p` to `k`.
+"""
+function raise_degree(p::BernsteinPolynomial{D,T}, k::NTuple{D,Int}) where {D,T}
+    if !all(k .>= degree(p))
+        @error "New degree should be higher."
+        return p
+    end
+    C = zeros(T, k.+1)
+    n = size(coeffs(p))
+    inds = CartesianIndices(ntuple(d->1:n[d],D))
+    copyto!(C, inds, coeffs(p), inds)
+    for d in 1:D 
+        for i in 1:k[d]-n[d]+1
+            selectdim(C, d, 1+i:n[d]+i) .+= selectdim(C, d, i:n[d]+i-1)
+        end
+    end
+    return BernsteinPolynomial(C, domain(p))
+end
+
 
 # Tensor-product pattern adapted from FastChebInterp.jl (MIT license)
 @fastmath function evaluate_bernstein(x::SVector{N}, c::AbstractArray, ::Val{dim}, i1,
@@ -290,6 +313,140 @@ function deCasteljau!(coeffs, d, t)
     return coeffs
 end
 deCasteljau(coeffs,d,t) = deCasteljau!(copy(coeffs),d,t)
+
+
+
+@enum CellType empty_cell whole_cell cut_cell
+# Level set expressed by a Vector of BernsteinPolynomial
+struct MultiBernsteinCell{N,T}
+    Ψ::Vector{BernsteinPolynomial{N,T}}
+    ∇Ψ::Vector{SVector{N,BernsteinPolynomial{N,T}}}
+    signs::Vector{Int}
+    rec::HyperRectangle{N,T}
+    celltype::CellType
+    function MultiBernsteinCell(Ψ::Vector{BernsteinPolynomial{N,T}}, signs) where {N,T}
+        @assert length(signs) == length(Ψ)
+        rec = domain(first(Ψ))
+        @assert all(ψ -> domain(ψ) == rec, Ψ)
+        ∇Ψ = map(partials, Ψ)
+        ctype = _prune!(Ψ, ∇Ψ, rec, signs)
+        return new{N,T}(Ψ, ∇Ψ, signs, rec::HyperRectangle{N,T}, ctype)
+    end
+end
+
+function MultiBernsteinCell(ψ::BernsteinPolynomial, s::Integer; kwargs...)
+    return MultiBernsteinCell([ψ], [s]; kwargs...)
+end
+
+cell_type(Ω::MultiBernsteinCell) = Ω.celltype
+
+"""
+    prune!(Ω)
+
+Prune the functions specifying the domain `Ω` and return the `CellType` of the domain.
+"""
+function prune!(Ω::MultiBernsteinCell)
+    return _prune!(Ω.Ψ, Ω.∇Ψ, Ω.rec, Ω.signs)
+end
+
+function _prune!(Ψ, ∇Ψ, rec, signs)
+    delInd = Vector{Int}()
+    for (i, ψ) in enumerate(Ψ)
+        si = signs[i]
+        t = cell_type(ψ, si, rec)
+        if t == whole_cell
+            # intersection is the whole rec, so ψ can be prune
+            # @info "Whole cell"
+            append!(delInd, i)
+        elseif t == empty_cell
+            # intersection is empty, return immediately
+            return empty_cell
+        end
+    end
+    deleteat!(signs, delInd)
+    deleteat!(Ψ, delInd)
+    deleteat!(∇Ψ, delInd)
+    isempty(Ψ) && return whole_cell
+    return cut_cell
+end
+
+function cell_type(ψ::BernsteinPolynomial, s, rec)
+    l, u = bound(ψ)
+    ψc = ψ(center(rec))
+    l * u ≥ 0 || (return cut_cell)
+    if s * ψc ≥ 0
+        # intersection is the whole rec
+        return whole_cell
+    else
+        # intersection is empty, return immediately
+        return empty_cell
+    end
+end
+
+function lower_restrict(ψ, rec, k)
+    a = low_corner(rec)[k]
+    return x -> ψ(insert(x, k, a))
+end
+
+function upper_restrict(ψ, rec, k)
+    a = high_corner(rec)[k]
+    return x -> ψ(insert(x, k, a))
+end
+
+function lower_restrict_grad(∇ψ::SVector{N}, rec, k) where {N}
+    a = low_corner(rec)[k]
+    ∇ψ′ = deleteat(∇ψ, k)
+    (x) -> ∇ψ′(insert(x, k, a))
+    return svector(d -> (x) -> ∇ψ′[d](insert(x, k, a)), N - 1)
+end
+
+function upper_restrict_grad(∇ψ::SVector{N}, rec, k) where {N}
+    a = high_corner(rec)[k]
+    ∇ψ′ = deleteat(∇ψ, k)
+    return svector(d -> (x) -> ∇ψ′[d](insert(x, k, a)), N - 1)
+end
+
+function Base.split(Ω::MultiBernsteinCell)
+    Ψ = Ω.Ψ
+    signs = Ω.signs
+    rec = Ω.rec
+    # split into left and right domains
+    k = argmax(width(rec))
+    Ψl = empty(Ψ)
+    Ψr = empty(Ψ)
+    for ψ in Ψ
+        ψl, ψr = split(ψ, k)
+        push!(Ψl, ψl)
+        push!(Ψr, ψr)
+    end
+    Ω1 = MultiBernsteinCell(Ψl, copy(signs))
+    Ω2 = MultiBernsteinCell(Ψr, copy(signs))
+    return Ω1, Ω2
+end
+
+function restrict(Ω::MultiBernsteinCell{N,T}, k, surf) where {N,T}
+    Ψ = Ω.Ψ
+    ∇Ψ = Ω.∇Ψ
+    signs = Ω.signs
+    rec = Ω.rec
+    xc = center(rec)
+    Ψ̃ = BernsteinPolynomial{N - 1,T}[]
+    ∇Ψ̃ = SVector{N - 1,BernsteinPolynomial{N - 1,T}}[] # one dimensional lower, so one less derivative in grad
+    new_signs = empty(signs)
+    for (ψ, s, ∇ψ) in zip(Ψ, signs, ∇Ψ)
+        # why bound? dont we know that ∇Ψ[k] has a fixed sign on direction k?
+        # pos_neg = bound(∇ψ[k],rec)[1] > 0 ? 1 : -1
+        pos_neg = ∇ψ[k](xc) > 0 ? 1 : -1 # use sign?
+        ψL = lower_restrict(ψ, k)
+        sL = sgn(pos_neg, s, surf, -1)
+        ψU = upper_restrict(ψ, k)
+        sU = sgn(pos_neg, s, surf, 1)
+        append!(Ψ̃, (ψL, ψU))
+        append!(new_signs, (sL, sU))
+    end
+    Ω̃ = MultiBernsteinCell(Ψ̃, new_signs)
+    return Ω̃
+end
 
 @doc raw"""
     curvature(p::BernsteinPolynomial{D}, x::SVector{D})
