@@ -55,6 +55,7 @@ import WavePropBase:
 include("bernsteinpolynomials.jl")
 include("gridfunction.jl")
 include("levelset.jl")
+include("utils.jl")
 include("quadgen.jl")
 include("meshgen.jl")
 
