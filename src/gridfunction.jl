@@ -14,8 +14,15 @@ end
 
 mesh(f::CartesianGridFunction) = f.els_mesh
 vals(f::CartesianGridFunction) = f.vals
-meshsize(f::CartesianGridFunction, args...) = step(mesh(f), args...)
+vals_mesh(f::CartesianGridFunction) = f.vals_mesh
 ambient_dimension(f::CartesianGridFunction{N}) where {N} = N
+
+Base.size(f::CartesianGridFunction) = size(vals(f))
+Base.getindex(f::CartesianGridFunction, args...) = getindex(vals(f), args...)
+Base.setindex!(f::CartesianGridFunction, v, args...) = setindex!(vals(f), v, args...)
+
+Base.step(f::CartesianGridFunction) = step(vals_mesh(f))
+Base.step(f::CartesianGridFunction,dim) = step(vals_mesh(f),dim)
 
 domain(f::CartesianGridFunction) = domain(mesh(f))
 

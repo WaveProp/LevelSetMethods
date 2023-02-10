@@ -3,26 +3,51 @@
     level-set by recursive subdivision and one-dimensional root-finding.
 =#
 
-function quadgen(ls::LevelSet; qorder=5, maxdepth=20, maxslope=10, meshsize, porder=1)
-    quadgen(CartesianLevelSet(ls; meshsize, order=porder);qorder, maxdepth, maxslope)
+function quadgen(ls::LevelSet; qorder=5, maxdepth=20, maxslope=10, meshsize=Inf)
+    N      = ambient_dimension(ls)
+    qnodes = Vector{QuadratureNode{N,Float64}}()
+    p   = (;qorder,maxdepth,maxslope,meshsize)
+    quadgen!(qnodes,ls,p)
+end
+
+function quadgen!(qnodes, ls::LevelSet, p::NamedTuple)
+    qrule = qrule_for_reference_shape(ReferenceLine(), p.qorder)
+    x1d,w1d = qrule()
+    x1d = [x[1] for x in x1d] |> Vector
+    w1d = [w[1] for w in w1d] |> Vector
+    s = levelset_sign(ls)
+    # mesh domain of `ls` with `p.meshsize`
+    msh = UniformCartesianMesh(domain(ls);step=p.meshsize)
+    for U in elements(msh)
+        root = MultiFunctionCell([f], [s], U)
+        surf = s == 0
+        level = 0
+        X, W  = _quadgen(root, surf, x1d, w1d, level, p)
+        for (x, w) in zip(X, W)
+            n = ForwardDiff.gradient(f, x)
+            n /= norm(n)
+            κ = curvature(f, x)
+            push!(qnodes, QuadratureNode(x, w, n, κ))
+        end
+    end
+    return qnodes
 end
 
 function quadgen(ls::CartesianLevelSet; qorder=5, maxdepth=20, maxslope=10)
     N = ambient_dimension(ls)
+    M = geometric_dimension(ls)
+    qrule1d = qrule_for_reference_shape(ReferenceLine(), qorder)
+    nq = length(qrule1d()[2])^M
     qnodes = Vector{QuadratureNode{N,Float64}}()
-    p   = (;qorder,maxdepth,maxslope)
-    return quadgen!(qnodes, ls, p)
+    p   = (;qrule1d,maxdepth,maxslope,qorder)
+    quadgen!(qnodes, ls, p)
+    return reshape(qnodes, nq, :)
 end
 
 function quadgen!(qnodes, ls::CartesianLevelSet, p::NamedTuple)
-    qrule = GaussLegendre(;order=p.qorder)
-    x1d,w1d = qrule()
+    x1d,w1d = p.qrule1d()
     x1d = [x[1] for x in x1d] |> Vector
     w1d = [w[1] for w in w1d] |> Vector
-    # npts = ceil(Int,(p.qorder + 1)/2)
-    # x1d, w1d = gausslegendre(npts)
-    # x1d .= (x1d .+ 1) ./ 2
-    # w1d .= w1d ./ 2
     s = levelset_sign(ls)
     # loop over the C∞ interpolants of `ls`
     for f in bernstein_interpolants(ls)
@@ -48,7 +73,8 @@ function dim1quad(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U, x1d, w
         end
     else
         for ψ in Ψ
-            ψ(L) * ψ(U) < 0 && union!(roots, find_zero(ψ, (L, U)))
+            y = my_find_zero(ψ, (L, U))
+            isnothing(y) || union!(roots, y)
         end
     end
     sort!(roots)
@@ -95,9 +121,11 @@ function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {
     if level ≥ par.maxdepth
         @warn "Maximum depth reached: resorting to low-order quadrature"
         if surf
-            return [xc], [prod(i->high_corner(rec)[i]-low_corner(rec)[i], D-1)]
+            # return [xc], [prod(i->high_corner(rec)[i]-low_corner(rec)[i], D-1)]
+            return [], []
         else
-            return [xc], [prod(high_corner(rec).-low_corner(rec))]
+            # return [xc], [prod(high_corner(rec).-low_corner(rec))]
+            return [], []
         end
     end
 
@@ -115,7 +143,8 @@ function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {
 
     # base case
     if D == 1
-        return dim1quad(Ψ, signs, low_corner(rec)[1], high_corner(rec)[1], x1d, w1d, true)
+        nodes, weights = dim1quad(Ψ, signs, low_corner(rec)[1], high_corner(rec)[1], x1d, w1d, true)
+        return nodes,weights
     end
 
     # find a heigh direction such that all of ∇Ψ are (provably) bounded away
@@ -164,13 +193,12 @@ function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {
             ∇ψ = first(∇Ψ)
             lk, rk = low_corner(rec)[k], high_corner(rec)[k]
             ψₖ(y) = ψ(insert(x, k, y))
-            if ψₖ(lk) * ψₖ(rk) < 0
-                y = find_zero(ψₖ, (lk, rk))
-                x̃ = insert(x, k, y)
-                ∇ϕ = map(f->f(x̃),∇ψ)
-                push!(nodes, x̃)
-                push!(weights, w * norm(∇ϕ) / abs(∇ϕ[k]))
-            end
+            y = my_find_zero(ψₖ, (lk, rk))
+            isnothing(y) && continue
+            x̃ = insert(x, k, y)
+            ∇ϕ = map(f->f(x̃),∇ψ)
+            push!(nodes, x̃)
+            push!(weights, w * norm(∇ϕ) / abs(∇ϕ[k]))
         else
             Φ = [y -> ψ(insert(x, k, y)) for ψ in Ψ]
             Y, Ω = dim1quad(Φ, signs, low_corner(rec)[k], high_corner(rec)[k], x1d, w1d, false)
@@ -185,25 +213,10 @@ function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {
 end
 
 
-"""
-    sgn(m,s,surface,side)
-
-Compute the sign of the upper and lower restrictions of a function `ψ` with sign
-`s`. The `side` variable is eithe `1` for the upper restriction, or `-1` for the
-lower restriction, and `m` is the sign of `∇ψ ⋅ eₖ`.
-"""
-function sgn(m, s, surface, side)
-    if m * s * side > 0 || surface
-        if m * side > 0
-            return 1
-        else
-            return -1
-        end
-    else
-        return 0
-    end
-end
-
-function StaticArrays.insert(x::Real, k, y::Real)
-    return insert(SVector(x), k, y)
+function NystromMesh(ls::CartesianLevelSet;kwargs...)
+    N = ambient_dimension(ls)
+    qnodes = quadgen(ls;kwargs...)
+    nq,nel = size(qnodes)
+    etype2qtags = Dict{DataType,Matrix{Int}}(Nothing => reshape(1:length(qnodes),nq,:))
+    return NystromMesh{N,Float64}(;qnodes=vec(qnodes),etype2qtags)
 end

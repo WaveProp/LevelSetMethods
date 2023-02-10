@@ -3,33 +3,66 @@
     level-set by recursive subdivision and one-dimensional root-finding.
 =#
 
-function meshgen(ls::LevelSet; maxdepth=20, maxslope=10, meshsize, order=1)
-    meshgen(CartesianLevelSet(ls; meshsize, order=order);maxdepth, maxslope)
+struct LevelSetElement{L,F,D,T} <: WPB.AbstractElement{D,T}
+    ϕ::L # level-set function
+    parametrization::F # explicit parametrization mapping D into the element
+    function LevelSetElement{D,T}(ϕ::L, f::F) where {L,F,D,T}
+        return new{L,F,D,T}(ϕ, f)
+    end
 end
 
-function meshgen(ls::CartesianLevelSet; maxdepth=20, maxslope=10)
-    N = ambient_dimension(ls)
-    msh = GenericMesh{N,Float64}()
-    p   = (;maxdepth,maxslope)
-    return meshgen!(msh, ls, p)
+WPB.ambient_dimension(el::LevelSetElement{L,F,D,T}) where {L,F,D,T} = length(T)
+function WPB.geometric_dimension(el::LevelSetElement{L,F,D,T}) where {L,F,D,T}
+    return geometric_dimension(D)
 end
 
-function meshgen!(msh::GenericMesh, ls::CartesianLevelSet, p::NamedTuple)
+(el::LevelSetElement)(u::SVector) = el.parametrization(u)
+(el::LevelSetElement)(u::Tuple) = el.parametrization(SVector(u))
+
+function WPB.normal(el::LevelSetElement, u)
+    x = el(u)
+    ∇ϕ = ForwardDiff.gradient(el.ϕ, x)
+    return normalize(∇ϕ)
+end
+
+function WPB.curvature(el::LevelSetElement, u)
+    x = el(u)
+    ∇ϕ = ForwardDiff.gradient(el.ϕ, x)
+    Hp = ForwardDiff.hessian(el.ϕ, x)
+    Np = norm(∇ϕ)
+    return tr(Hp) / Np - dot(∇ϕ, Hp, ∇ϕ) / Np^3
+end
+
+function WPB.meshgen(ls::LevelSet; kwargs...)
     N = ambient_dimension(ls)
-    V = SVector{N,Float64}
-    D = ReferenceHyperCube{Int(geometric_dimension(ls))} # reference domain
+    T = Float64
+    msh = GenericMesh{N,T}()
+    return meshgen!(msh, ls; kwargs...)
+end
+
+function WPB.meshgen!(msh, ls::LevelSet; maxdepth=20, maxslope=10)
+    ϕ = levelset_function(ls)
+    @assert ϕ isa CartesianGridFunction "the `levelset_function` must be a `CartesianGridFunction`"
     s = levelset_sign(ls)
+    p = (; maxdepth, maxslope, s)
+    return _meshgen!(msh, ls, ϕ, p)
+end
+
+function _meshgen!(msh::GenericMesh{N,T}, ls::LevelSet, ϕ::CartesianGridFunction{N,T},
+                   p::NamedTuple) where {N,T}
+    V = SVector{N,T}
+    D = ReferenceHyperCube{Int(geometric_dimension(ls))} # reference domain
     edict = msh.elements
     e2t = Dict{DataType,Vector{Int}}()
     # loop over the C∞ interpolants of `ls`
-    for f in bernstein_interpolants(ls)
-        root = MultiBernsteinCell([f], [s])
-        surf = s == 0
+    for f in bernstein_interpolants(ϕ)
+        root = MultiBernsteinCell([f], [p.s])
+        surf = p.s == 0
         level = 0
-        maps  = _meshgen(root, surf, level, p)
+        maps = _meshgen(root, surf, level, p)
         # sort elements by type for the given entity
         for τ in maps
-            el = ParametricElement{D,V}(τ)
+            el = LevelSetElement{D,V}(f, τ)
             E = typeof(el)
             els = get!(edict, E, Vector{E}())
             tags = get!(e2t, E, Int[])
@@ -46,7 +79,9 @@ end
 function dim1mesh(Ψ::Vector, signs::Vector{<:Integer}, L, U)
     roots = [L, U]
     for ψ in Ψ
-        union!(roots, find_zeros(ψ, L, U))
+        y = my_find_zero(ψ, (L, U))
+        isnothing(y) || union!(roots, y)
+        # union!(roots, find_zeros(ψ, L, U))
     end
     sort!(roots)
     Maps = Vector{Function}()
@@ -85,7 +120,7 @@ function HDmesh(Ψ::Vector, signs::Vector{<:Integer}, L, U, τ, k, D)
     return Maps
 end
 
-function _meshgen(Ω::MultiBernsteinCell{N,T}, surf, level,p) where {N,T}
+function _meshgen(Ω::MultiBernsteinCell{N,T}, surf, level, p) where {N,T}
     rec = Ω.rec
     xc = center(rec)
     Ψ = Ω.Ψ
@@ -170,7 +205,8 @@ function _meshgen(Ω::MultiBernsteinCell{N,T}, surf, level,p) where {N,T}
             function τ(x)
                 x̂ = t(x)
                 ψₖ(y) = ψ(insert(x̂, k, y))
-                y = find_zero(ψₖ, (lk, rk))
+                y = my_find_zero(ψₖ, (lk, rk))
+                isnothing(y) && error()
                 return insert(x̂, k, y)
             end
             push!(Maps, τ)
@@ -182,4 +218,81 @@ function _meshgen(Ω::MultiBernsteinCell{N,T}, surf, level,p) where {N,T}
     end
     ###########################################
     return Maps
+end
+
+## Marching squares
+function marchingsquares(ls::LevelSet)
+    msh = GenericMesh{2,Float64}()
+    return marchingsquares!(msh, ls)
+end
+
+function marchingsquares!(msh::GenericMesh{N,T}, ls::LevelSet) where {N,T}
+    @assert ambient_dimension(ls) == 2 "marching squares requires two-dimensional level set"
+    @assert levelset_sign(ls) == 0 "marching squares can only mesh zero level sets: got s = $(levelset_sign(ϕ))"
+    ϕ = levelset_function(ls)
+    @assert ϕ isa CartesianGridFunction "marching squares requires the level-set function to be a `CartesianGridFunction`"
+    return _marchingsquares!(msh, ls, ϕ)
+end
+
+function _marchingsquares!(msh, ls::LevelSet, ϕ::CartesianGridFunction)
+    x, y = WPB.grids(vals_mesh(ϕ))
+    z = ϕ.vals
+    # elements are lines in 2d with two points
+    E = WPB.LagrangeLine{2,WPB.Point2D}
+    enttags = Int[]
+    msh.ent2tags[ls] = Dict(E => enttags)
+    el2tag = get!(msh.elements, E, Matrix{Int}(undef, 2, 0))
+    elidx = size(el2tag, 2)
+    el2tag = vec(el2tag)
+    cl = contour(x, y, z, 0)
+    for line in lines(cl)
+        pts = line.vertices
+        closed = pts[1] == pts[end]
+        npts = length(pts)
+        istart = length(msh.nodes) + 1
+        for n in 1:(npts - 1)
+            push!(msh.nodes, pts[n])
+            i = length(msh.nodes)
+            push!(el2tag, i, i + 1)
+            elidx += 1
+            push!(enttags, elidx)
+        end
+        if closed
+            # make last node index point to first
+            el2tag[end] = istart
+        else
+            push!(msh.nodes, pts[end])
+        end
+    end
+    el2tag = reshape(el2tag, 2, :)
+    msh.elements[E] = el2tag
+    return msh
+end
+
+## Marching cubes
+function marchingcubes(ls::LevelSet)
+    @assert ambient_dimension(ls) == 3 && geometric_dimension(ls) == 2 "marching cubes only works on three-dimensional surfaces"
+    N, T = 3, Float64
+    msh = GenericMesh{N,T}()
+    return marchingcubes!(msh, ls)
+end
+
+function marchingcubes!(msh::GenericMesh, ls)
+    ϕ = levelset_function(ls)
+    msg = "marching cubes requires the level-set function to be a `CartesianGridFunction`"
+    @assert ϕ isa CartesianGridFunction msg
+    x, y, z = collect.(grids(vals_mesh(ϕ)))
+    mc = MC(vals(ϕ), Int; x, y, z)
+    march(mc)
+    T = WPB.Triangle3D{Float64}
+    nstart = length(msh.nodes)
+    append!(msh.nodes, mc.vertices)
+    connectivity = nstart .+ collect(reinterpret(reshape, Int64, mc.triangles))
+    if haskey(msh.elements, T)
+        msh.elements[T] = hcat(msh.elements[T], connectivity)
+    else
+        msh.elements[T] = connectivity
+    end
+    push!(msh.ent2tags, ls => Dict(T => [i for i in 1:size(connectivity, 2)]))
+    return msh
 end

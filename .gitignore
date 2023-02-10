@@ -1,2 +1,6 @@
 **.gif
 Manifest.toml
+.vscode
+docs/build
+src/intervalarithmetic.jl
+*.vtu
