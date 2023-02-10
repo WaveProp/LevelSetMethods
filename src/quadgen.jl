@@ -3,54 +3,25 @@
     level-set by recursive subdivision and one-dimensional root-finding.
 =#
 
-function quadgen(ls::LevelSet; qorder=5, maxdepth=20, maxslope=10, meshsize=Inf)
-    N      = ambient_dimension(ls)
-    qnodes = Vector{QuadratureNode{N,Float64}}()
-    p   = (;qorder,maxdepth,maxslope,meshsize)
-    quadgen!(qnodes,ls,p)
-end
-
-function quadgen!(qnodes, ls::LevelSet, p::NamedTuple)
-    qrule = qrule_for_reference_shape(ReferenceLine(), p.qorder)
-    x1d,w1d = qrule()
-    x1d = [x[1] for x in x1d] |> Vector
-    w1d = [w[1] for w in w1d] |> Vector
-    s = levelset_sign(ls)
-    # mesh domain of `ls` with `p.meshsize`
-    msh = UniformCartesianMesh(domain(ls);step=p.meshsize)
-    for U in elements(msh)
-        root = MultiFunctionCell([f], [s], U)
-        surf = s == 0
-        level = 0
-        X, W  = _quadgen(root, surf, x1d, w1d, level, p)
-        for (x, w) in zip(X, W)
-            n = ForwardDiff.gradient(f, x)
-            n /= norm(n)
-            κ = curvature(f, x)
-            push!(qnodes, QuadratureNode(x, w, n, κ))
-        end
-    end
-    return qnodes
-end
-
-function quadgen(ls::CartesianLevelSet; qorder=5, maxdepth=20, maxslope=10)
+function quadgen(ls::LevelSet; qorder=5, maxdepth=20, maxslope=10, curvature=false)
     N = ambient_dimension(ls)
     M = geometric_dimension(ls)
-    qrule1d = qrule_for_reference_shape(ReferenceLine(), qorder)
+    qrule1d = WPB.qrule_for_reference_shape(WPB.ReferenceLine(), qorder)
     nq = length(qrule1d()[2])^M
     qnodes = Vector{QuadratureNode{N,Float64}}()
-    p   = (;qrule1d,maxdepth,maxslope,qorder)
+    p   = (;qrule1d,maxdepth,maxslope,qorder,curvature)
     quadgen!(qnodes, ls, p)
     return reshape(qnodes, nq, :)
 end
 
-function quadgen!(qnodes, ls::CartesianLevelSet, p::NamedTuple)
+function quadgen!(qnodes, ls::LevelSet, p::NamedTuple)
     x1d,w1d = p.qrule1d()
     x1d = [x[1] for x in x1d] |> Vector
     w1d = [w[1] for w in w1d] |> Vector
     s = levelset_sign(ls)
+    ϕ = levelset_function(ls)
     # loop over the C∞ interpolants of `ls`
-    for f in bernstein_interpolants(ls)
+    for f in bernstein_interpolants(ϕ)
         root = MultiBernsteinCell([f], [s])
         surf = s == 0
         level = 0
@@ -58,56 +29,11 @@ function quadgen!(qnodes, ls::CartesianLevelSet, p::NamedTuple)
         for (x, w) in zip(X, W)
             n = ForwardDiff.gradient(f, x)
             n /= norm(n)
-            κ = curvature(f, x)
+            κ = p.curvature ? curvature(f, x) : nothing
             push!(qnodes, QuadratureNode(x, w, n, κ))
         end
     end
     return qnodes
-end
-
-function dim1quad(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U, x1d, w1d, multi_zeros=true)
-    roots = [L, U]
-    if multi_zeros
-        for ψ in Ψ
-            union!(roots, find_zeros(ψ, L, U))
-        end
-    else
-        for ψ in Ψ
-            y = my_find_zero(ψ, (L, U))
-            isnothing(y) || union!(roots, y)
-        end
-    end
-    sort!(roots)
-    nodes   = Vector{Float64}()
-    weights = Vector{Float64}()
-    for (l, r) in zip(roots[1:end-1], roots[2:end])
-        val = [ψ((l + r) / 2.0) for ψ in Ψ]
-        if all((val .* signs) .≥ 0)
-            # push then rescale the nodes
-            append!(nodes, x1d)
-            append!(weights, w1d)
-            is = length(nodes)-length(x1d)+1 # where the new nodes start
-            for i in is:length(nodes)
-                nodes[i]   = nodes[i] * (r - l) + l
-                weights[i] = weights[i] * (r - l)
-            end
-        end
-    end
-    return nodes, weights
-end
-
-function tensorquad(rec::HyperRectangle{D}, x1d, w1d) where {D}
-    xl, xu = low_corner(rec), high_corner(rec)
-    μ      = prod(xu-xl)
-    nodes = map(Iterators.product(ntuple(i->x1d,D)...)) do x̂
-        # map reference nodes to rec
-        rec(SVector(x̂))
-    end |> vec
-    weights = map(Iterators.product(ntuple(i->w1d,D)...)) do ŵ
-        # scale reference weights
-        prod(ŵ)*μ
-    end |> vec
-    nodes, weights
 end
 
 function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {N,T}
@@ -212,8 +138,52 @@ function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {
     return nodes, weights
 end
 
+function dim1quad(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U, x1d, w1d, multi_zeros=true)
+    roots = [L, U]
+    if multi_zeros
+        for ψ in Ψ
+            union!(roots, find_zeros(ψ, L, U))
+        end
+    else
+        for ψ in Ψ
+            y = my_find_zero(ψ, (L, U))
+            isnothing(y) || union!(roots, y)
+        end
+    end
+    sort!(roots)
+    nodes   = Vector{Float64}()
+    weights = Vector{Float64}()
+    for (l, r) in zip(roots[1:end-1], roots[2:end])
+        val = [ψ((l + r) / 2.0) for ψ in Ψ]
+        if all((val .* signs) .≥ 0)
+            # push then rescale the nodes
+            append!(nodes, x1d)
+            append!(weights, w1d)
+            is = length(nodes)-length(x1d)+1 # where the new nodes start
+            for i in is:length(nodes)
+                nodes[i]   = nodes[i] * (r - l) + l
+                weights[i] = weights[i] * (r - l)
+            end
+        end
+    end
+    return nodes, weights
+end
 
-function NystromMesh(ls::CartesianLevelSet;kwargs...)
+function tensorquad(rec::HyperRectangle{D}, x1d, w1d) where {D}
+    xl, xu = low_corner(rec), high_corner(rec)
+    μ      = prod(xu-xl)
+    nodes = map(Iterators.product(ntuple(i->x1d,D)...)) do x̂
+        # map reference nodes to rec
+        rec(SVector(x̂))
+    end |> vec
+    weights = map(Iterators.product(ntuple(i->w1d,D)...)) do ŵ
+        # scale reference weights
+        prod(ŵ)*μ
+    end |> vec
+    nodes, weights
+end
+
+function NystromMesh(ls::LevelSet;kwargs...)
     N = ambient_dimension(ls)
     qnodes = quadgen(ls;kwargs...)
     nq,nel = size(qnodes)
