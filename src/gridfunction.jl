@@ -1,9 +1,9 @@
 """
     struct CartesianGridFunction{N,T,V}
 
-A function `f : ℝᴺ → V` defined by discrete values on the nodes of a
-`UniformCartesianMesh`. The `order` parameter specifies the polynomial order of
-the interpolation scheme.
+A piecewise-polynomial function `p : ℝᴺ → V` defined by discrete values on the
+nodes of a `UniformCartesianMesh`. The `order` parameter specifies the
+polynomial order of the interpolation scheme.
 """
 struct CartesianGridFunction{N,T,V}
     vals::Array{V,N}
@@ -26,6 +26,15 @@ Base.step(f::CartesianGridFunction,dim) = step(vals_mesh(f),dim)
 
 domain(f::CartesianGridFunction) = domain(mesh(f))
 
+"""
+    CartesianGridFunction(f::Function, U::HyperRectangle{N,T}; meshsize,
+    order=1)
+
+Project the function `f` on a `UniformCartesianGrid` of `U` with meshsize given
+by `meshsize`. The `order` parameter specifies the polynomial order of the
+interpolation scheme for reconstructing a continuous function from the grid
+values.
+"""
 function CartesianGridFunction(f::Function, U::HyperRectangle{N,T}; meshsize,
                                order=1) where {N,T}
     els_mesh = UniformCartesianMesh(U; step=meshsize)

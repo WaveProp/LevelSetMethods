@@ -71,6 +71,27 @@ function applybc!(ϕ::CartesianGridFunction,bc::PeriodicBC{P},dir) where {P}
     return ϕ
 end
 
+
+"""
+    struct NeumannBC{P}
+
+A high-order homogeneous Neumann boundary condition with `P` ghost nodes.
+"""
+struct NeumannBC{N} <: BoundaryCondition end
+
+NeumannBC(n::Int) = NeumannBC{n}()
+
+num_ghost_points(::NeumannBC{N}) where {N} = N
+
+function applybc!(ϕ::CartesianGridFunction,bc::NeumannBC{P},dir) where {P}
+    A = vals(ϕ)
+    I⁻r,I⁺r = _index_read(A,bc,dir)
+    I⁻w,I⁺w = _index_write(A,bc,dir)
+    @views copy!(A[I⁻w],A[I⁻r])
+    @views copy!(A[I⁺w],A[I⁺r])
+    return ϕ
+end
+
 ## Helper functions
 
 function _index_write(ϕ,bc::BoundaryCondition,dir)

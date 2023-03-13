@@ -16,13 +16,13 @@ end
     N = ambient_dimension(ls)
     if N == 2 # 2d contour plot
         if s == 0
+            levels --> [0]
             seriestype --> :contour
         else
+            levels --> [0]
             seriestype --> :contourf
         end
-        levels --> [0,0]
         aspect_ratio --> :equal
-        colorbar --> false
         # seriescolor --> :black
         m = vals_mesh(ϕ)
         # Note: the vals of ϕ need be transposed because contour expects the

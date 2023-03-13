@@ -74,6 +74,7 @@ function compute_rhs!(dϕ, ϕ, p, t)
     nodes = ϕ |> vals_mesh |> NodeIterator
     for I in interior_indices(ϕ, p.bc)
         x = nodes[I]
+        _compute_terms(p.terms, ϕ, I)
         dϕ[I] = -_compute_terms(p.terms, ϕ, I)
     end
     return dϕ
@@ -187,7 +188,6 @@ function _compute_cfl(term::LevelSetTerm, ϕ, I)
     end
 end
 
-
 """
     struct AdvectionTerm{V,M} <: LevelSetTerm
 
@@ -278,21 +278,20 @@ Level-set advection term representing  `v |∇ϕ|`. This `LevelSetTerm` should b
 used for internally generated velocity fields; for externally generated
 velocities you may use [`AdvectionTerm`](@ref) instead.
 """
-Base.@kwdef struct NormalMotionTerm{N,T,V} <: LevelSetTerm
-    speed::CartesianGridFunction{N,T,V}
+Base.@kwdef struct NormalMotionTerm{T} <: LevelSetTerm
+    speed::T
 end
 speed(adv::NormalMotionTerm) = adv.speed
 
 Base.show(io::IO, ::NormalMotionTerm) = print(io, "v|∇ϕ|")
 
-function _compute_term(term::NormalMotionTerm, ϕ, I)
-    u = speed(term)
-    v = u[I]
-    ∇ = _compute_∇_normal_motion(v, ϕ, I)
+function _compute_term(term::NormalMotionTerm, ϕ::CartesianGridFunction, I)
+    v = speed(term)[I]
+    ∇ = _compute_∇_norm(v, ϕ, I)
     return ∇ * v
 end
 
-function _compute_∇_normal_motion(v, ϕ, I)
+function _compute_∇_norm(v, ϕ, I)
     N = ambient_dimension(ϕ)
     mA0², mB0² = sum(1:N) do dim
         h = step(ϕ, dim)
@@ -335,9 +334,9 @@ end
 
 Base.show(io::IO, ::ReinitializationTerm) = print(io, "sign(ϕ) (|∇ϕ| - 1)")
 
-function _compute_term(::ReinitializationTerm, ϕ::CartesianGridFunction, I)
+function _compute_term(term::ReinitializationTerm, ϕ::CartesianGridFunction, I)
     v = sign(ϕ[I])
-    ∇ = _compute_∇_normal_motion(v, ϕ, I)
+    ∇ = _compute_∇_norm(v, ϕ, I)
     return (∇ - 1.0) * v
 end
 
