@@ -1,0 +1,79 @@
+---
+title : Convergence of quadrature 
+author : Luiz M. Faria
+date: December 31, 2022
+---
+
+# Implicit quadrature generation
+
+## Convergence in 2d
+
+```julia
+using LevelSetMethods
+using Plots
+r = 0.5
+f = x -> sqrt(x[1]^2 + x[2]^2) - r
+U = HyperRectangle((-r,-r),(r,r))
+
+meshsizes = [0.5/2^i for i in 0:7]
+nn = []
+ee = []
+for meshsize in meshsizes
+    Ω = CartesianLevelSet(f,U;meshsize,order=5)
+    Γ = boundary(Ω)
+    msh = meshgen(Γ)
+    Q = NystromMesh(msh;qorder=3)
+    er = abs(integrate(x->1.0,Q) - 2π*r)
+    n = length(Q.qnodes)
+    push!(nn,n)
+    push!(ee,er)
+    qnodes = quadgen(Γ;qorder=3)
+    er2 = abs(sum(q->q.weight,qnodes) - 2π*r)
+    @show n,er, er2
+end
+```
+
+Plot the errors
+
+```julia
+p = 4
+plot(meshsizes,meshsizes .^ p / meshsizes[end] .^ p * ee[end],xscale=:log10,yscale=:log10,label="er ∼ h³")
+plot!(meshsizes,ee,label="parametric",m=:circle)
+```
+
+## Convergence in 3d
+
+```julia
+using LevelSetMethods
+using Plots
+r = 0.5
+f = x -> sqrt(x[1]^2 + x[2]^2 + x[3]^2) - r
+c = 1.1
+U = HyperRectangle((-c*r,-c*r,-c*r),(c*r,c*r,c*r))
+
+meshsizes = [0.5/2^i for i in 0:5]
+nn = []
+ee = []
+for meshsize in meshsizes
+    Ω = CartesianLevelSet(f,U;meshsize,order=2)
+    Γ = boundary(Ω)
+    #msh = meshgen(Γ;maxslope=10)
+    #msh = marchingcubes(Γ)
+    #Q = NystromMesh(msh;qorder=3)
+    #er = abs(integrate(x->1.0,Q) - 4π*r^2)
+    qnodes = LevelSetMethods.quadgen(Γ;qorder=3)
+    er = abs(sum(q->q.weight,qnodes) - 4π*r^2)
+    n = length(qnodes)
+    push!(nn,n)
+    push!(ee,er)
+    @show meshsize,n,er
+end
+```
+
+Plot the errors
+
+```julia
+p = 3
+plot(meshsizes,meshsizes .^ p / meshsizes[end] .^ p * ee[end],xscale=:log10,yscale=:log10,label="er ∼ h^$p")
+plot!(meshsizes,ee,label="",m=:circle)
+```

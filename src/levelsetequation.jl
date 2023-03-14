@@ -2,7 +2,7 @@
     struct LevelSetEquation
 
 Representation of a level-set equation of the form `ϕₜ + ∑ᵢ (Fᵢ) = 0`, where
-each `Fᵢ` is a `LevelSetTerm`.
+each `Fᵢ` is a [`LevelSetTerm`](@ref).
 
 A `LevelSetEquation` has a `current_state` representing a level-set function at
 the `current_time`. It can be stepped foward in time using
@@ -16,19 +16,21 @@ can be used to control the multiplier in the `cfl` condition; that is, `Δt = cf
 Base.@kwdef mutable struct LevelSetEquation
     terms::Tuple
     integrator::TimeIntegrator
-    levelset::DiscreteLevelSet
+    levelset::LevelSet
     t::Float64 = 0
     buffers = allocate_buffers(levelset,integrator)
     cfl::Float64 = 0.5
     boundary_condition::BoundaryCondition
 end
 
-function allocate_buffers(ϕ::DiscreteLevelSet,::ForwardEuler)
-    return (similar(vals(ϕ)),)
+function allocate_buffers(ϕ::LevelSet,::ForwardEuler)
+    f = levelset_function(ϕ)
+    return (deepcopy(f),)
 end
 
-function allocate_buffers(ϕ,::RK2)
-    return (similar(vals(ϕ)),deepcopy(ϕ.f))
+function allocate_buffers(ϕ::LevelSet,::RK2)
+    f = levelset_function(ϕ)
+    return (deepcopy(f),deepcopy(f))
 end
 
 function Base.show(io::IO, eq::LevelSetEquation)
@@ -47,8 +49,9 @@ end
 
 # getters
 levelset(eq::LevelSetEquation) = eq.levelset
-vals(eq::LevelSetEquation) = eq |> levelset |> vals
-mesh(eq::LevelSetEquation) = eq |> levelset |> mesh
+levelset_function(eq::LevelSetEquation) = levelset_function(eq.levelset)
+vals(eq::LevelSetEquation) = eq |> levelset_function |> vals
+mesh(eq::LevelSetEquation) = eq |> levelset_function |> mesh
 current_time(eq::LevelSetEquation) = eq.t
 buffers(eq::LevelSetEquation) = eq.buffers
 time_integrator(eq::LevelSetEquation) = eq.integrator
@@ -57,22 +60,30 @@ cfl(eq::LevelSetEquation) = eq.cfl
 boundary_condition(eq::LevelSetEquation) = eq.boundary_condition
 
 function compute_rhs!(eq::LevelSetEquation)
-    u = vals(eq)
+    ϕ  = levelset_function(eq)
     bc = boundary_condition(eq)
-    du = buffers(eq)[1]
-    t = current_time(eq)
-    pars = (bc=boundary_condition(eq), terms=terms(eq), mesh=mesh(eq))
-    du = compute_rhs!(du, u, pars, t)
+    dϕ = buffers(eq)[1]
+    t  = current_time(eq)
+    pars = (bc=boundary_condition(eq), terms=terms(eq))
+    compute_rhs!(dϕ, ϕ, pars, t) # write in dϕ
     return eq
 end
 
-function compute_rhs!(du, u, p, t)
-    applybc!(u, p.bc)
-    iter = p.mesh |> NodeIterator
-    for I in interior_indices(iter, p.bc)
-        du[I] = -_compute_terms(p.terms, u, I)
+function compute_rhs!(dϕ, ϕ, p, t)
+    applybc!(ϕ, p.bc)
+    nodes = ϕ |> vals_mesh |> NodeIterator
+    for I in interior_indices(ϕ, p.bc)
+        x = nodes[I]
+        _compute_terms(p.terms, ϕ, I)
+        dϕ[I] = -_compute_terms(p.terms, ϕ, I)
     end
-    return du
+    return dϕ
+end
+
+function _compute_terms(terms::Tuple, ϕ, I)
+    sum(terms) do term
+        _compute_term(term, ϕ, I)
+    end
 end
 
 """
@@ -92,7 +103,7 @@ function integrate!(eq::LevelSetEquation, tf, Δt=Inf)
     msg = "final time $(tf) must be larger than the initial time $(tc):
            the level-set equation cannot be solved back in time"
     @assert tf >= tc msg
-    ϕ = levelset(eq).f
+    ϕ = levelset_function(eq)
     pars = (bc=boundary_condition(eq), terms=terms(eq), mesh=mesh(eq),
         cfl=cfl(eq), tc=tc, tf=tf, Δt=Δt, buffers=buffers(eq))
     # dynamic dispatch. Should not be a problem provided enough computation is
@@ -145,13 +156,6 @@ function _integrate!(ϕ, p, ::RK2)
     return ϕ, tc
 end
 
-# for a tuple of terms, sum their contributions
-function _compute_terms(terms::Tuple, ϕ, I)
-    sum(terms) do term
-        _compute_term(term, ϕ, I)
-    end
-end
-
 """
     abstract type LevelSetTerm
 
@@ -189,47 +193,44 @@ end
 
 Level-set advection term representing  `𝐯 ⋅ ∇ϕ`.
 """
-Base.@kwdef struct AdvectionTerm{N,T,S<:SpatialScheme} <: LevelSetTerm
-    velocity::CartesianGridFunction{N,T,SVector{N,T}}
+Base.@kwdef struct AdvectionTerm{F,S<:SpatialScheme} <: LevelSetTerm
+    velocity::F
     scheme::S = Upwind()
 end
 velocity(adv::AdvectionTerm) = adv.velocity
 scheme(adv::AdvectionTerm) = adv.scheme
 
-Base.show(io::IO, t::AdvectionTerm) = print(io, "𝐮 ⋅ ∇ ϕ")
+Base.show(io::IO, ::AdvectionTerm) = print(io, "u⃗ ⋅ ∇ ϕ")
 
-@inline function _compute_term(term::AdvectionTerm, ϕ, I, dim)
-    sch = scheme(term)
-    𝐮 = velocity(term)
+function _compute_term(term::AdvectionTerm, ϕ::CartesianGridFunction, I)
     N = ambient_dimension(ϕ)
+    u = velocity(term)[I]
+    sum(1:N) do dim
+        _compute_term(term, ϕ, I, dim, u[dim])
+    end
+end
+
+@inline function _compute_term(term::AdvectionTerm, ϕ::CartesianGridFunction, I, dim, v)
+    sch = scheme(term)
     # for dimension dim, compute the upwind derivative and multiply by the
-    # velocity
-    v = 𝐮[I][dim]
-    if v > 0
-        if sch === Upwind()
+    # velocity v in that dimension
+    if sch === Upwind()
+        if v > 0
             return v * D⁻(ϕ, I, dim)
-        elseif sch === WENO5()
+        else
+            return v * D⁺(ϕ, I, dim)
+        end
+    elseif sch === WENO5()
+        if v > 0
             return v * weno5⁻(ϕ, I, dim)
         else
-            error("scheme $sch not implemented")
+            return v * weno5⁺(ϕ, I, dim)
         end
     else
-        if sch === Upwind()
-            return v * D⁺(ϕ, I, dim)
-        elseif sch === WENO5()
-            return v * weno5⁺(ϕ, I, dim)
-        else
-            error("scheme $sch not implemented")
-        end
+        error("scheme $sch not implemented")
     end
 end
 
-function _compute_term(term::AdvectionTerm, ϕ, I)
-    N = ambient_dimension(ϕ)
-    sum(1:N) do dim
-        _compute_term(term, ϕ, I, dim)
-    end
-end
 
 function _compute_cfl(term::AdvectionTerm, ϕ, I, dim)
     𝐮 = velocity(term)[I]
@@ -245,12 +246,12 @@ end
 Level-set curvature term representing `bκ|∇ϕ|`, where `κ = ∇ ⋅ (∇ϕ/|∇ϕ|) ` is
 the curvature.
 """
-struct CurvatureTerm{V,M} <: LevelSetTerm
-    b::CartesianGridFunction{V,M}
+struct CurvatureTerm{N,T,V} <: LevelSetTerm
+    b::CartesianGridFunction{N,T,V}
 end
 coefficient(cterm::CurvatureTerm) = cterm.b
 
-Base.show(io::IO, t::CurvatureTerm) = print(io, "b κ|∇ϕ|")
+Base.show(io::IO, ::CurvatureTerm) = print(io, "b κ|∇ϕ|")
 
 function _compute_term(term::CurvatureTerm, ϕ, I)
     N = ambient_dimension(ϕ)
@@ -277,21 +278,20 @@ Level-set advection term representing  `v |∇ϕ|`. This `LevelSetTerm` should b
 used for internally generated velocity fields; for externally generated
 velocities you may use [`AdvectionTerm`](@ref) instead.
 """
-Base.@kwdef struct NormalMotionTerm{V,M} <: LevelSetTerm
-    speed::CartesianGridFunction{V,M}
+Base.@kwdef struct NormalMotionTerm{T} <: LevelSetTerm
+    speed::T
 end
 speed(adv::NormalMotionTerm) = adv.speed
 
-Base.show(io::IO, t::NormalMotionTerm) = print(io, "v|∇ϕ|")
+Base.show(io::IO, ::NormalMotionTerm) = print(io, "v|∇ϕ|")
 
-function _compute_term(term::NormalMotionTerm, ϕ, I)
-    u = speed(term)
-    v = u[I]
-    ∇ = _compute_∇_normal_motion(v, ϕ, I)
+function _compute_term(term::NormalMotionTerm, ϕ::CartesianGridFunction, I)
+    v = speed(term)[I]
+    ∇ = _compute_∇_norm(v, ϕ, I)
     return ∇ * v
 end
 
-function _compute_∇_normal_motion(v, ϕ, I)
+function _compute_∇_norm(v, ϕ, I)
     N = ambient_dimension(ϕ)
     mA0², mB0² = sum(1:N) do dim
         h = step(ϕ, dim)
@@ -332,22 +332,12 @@ Eikonal equation |∇ϕ| = 1.
 Base.@kwdef struct ReinitializationTerm <: LevelSetTerm
 end
 
-Base.show(io::IO, t::ReinitializationTerm) = print(io, "sign(ϕ) (|∇ϕ| - 1)")
+Base.show(io::IO, ::ReinitializationTerm) = print(io, "sign(ϕ) (|∇ϕ| - 1)")
 
-function _compute_term(term::ReinitializationTerm, ϕ, I)
+function _compute_term(term::ReinitializationTerm, ϕ::CartesianGridFunction, I)
     v = sign(ϕ[I])
-    ∇ = _compute_∇_normal_motion(v, ϕ, I)
+    ∇ = _compute_∇_norm(v, ϕ, I)
     return (∇ - 1.0) * v
 end
 
-_compute_cfl(term::ReinitializationTerm, ϕ, I, dim) = step(ϕ)[dim]
-
-# recipes for Plots
-@recipe function f(eq::LevelSetEquation)
-    ϕ = levelset(eq)
-    t = round(current_time(eq); digits=2)
-    @series begin
-        title --> "t=$t"
-        ϕ
-    end
-end
+_compute_cfl(::ReinitializationTerm, ϕ, I, dim) = step(ϕ)[dim]

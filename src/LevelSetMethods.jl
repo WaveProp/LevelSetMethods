@@ -1,10 +1,16 @@
 module LevelSetMethods
 
+import WavePropBase as WPB
+
 using LinearAlgebra
-using StaticArrays
 using Roots
+using Contour
+using MarchingCubes
+using IntervalArithmetic
+using ForwardDiff
+using StaticArrays
 using RecipesBase
-using Base.Threads: @threads, @spawn
+using Printf
 
 import WavePropBase:
     AbstractEntity,
@@ -14,6 +20,8 @@ import WavePropBase:
     GenericMesh,
     ElementIterator,
     TensorLagInterp,
+    GaussLegendre,
+    QuadratureNode,
     NodeIterator,
     LagrangeSquare,
     LagrangeTriangle,
@@ -46,37 +54,43 @@ import WavePropBase:
     increment_index,
     decrement_index,
     meshgen,
+    meshgen!,
     integrate
 
-# static functionality
+include("utils.jl")
 include("bernsteinpolynomials.jl")
 include("gridfunction.jl")
+include("derivatives.jl")
+include("boundaryconditions.jl")
 include("levelset.jl")
 include("meshgen.jl")
-
-# dynamic functionality
-# include("boundaryconditions.jl")
-# include("derivatives.jl")
-# include("timestepping.jl")
-# include("levelsetequation.jl")
+include("quadgen.jl")
+include("timestepping.jl")
+include("levelsetequation.jl")
+include("plotsIO.jl")
 
 export
-    HyperRectangle,
-    NystromMesh,
-    LevelSetEquation,
     LevelSet,
     CartesianLevelSet,
-    CartesianGridFunction,
-    PeriodicBC,
-    AdvectionTerm,
-    CurvatureTerm,
-    Upwind,
-    WENO5,
-    ForwardEuler,
-    RK2,
-    integrate,
-    meshgen,
-    boundary,
-    power2bernstein
+    meshgen
+
+
+# export
+#     NystromMesh,
+#     LevelSetEquation,
+#     LevelSet,
+#     CartesianLevelSet,
+#     CartesianGridFunction,
+#     PeriodicBC,
+#     AdvectionTerm,
+#     CurvatureTerm,
+#     Upwind,
+#     WENO5,
+#     ForwardEuler,
+#     RK2,
+#     integrate,
+#     meshgen,
+#     boundary,
+#     power2bernstein
 
 end # module

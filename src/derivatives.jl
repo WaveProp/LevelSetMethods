@@ -27,8 +27,7 @@ struct WENO5 <: SpatialScheme end
 Centered finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-function D⁰(ϕ,I,dim)
-    h    = step(ϕ,dim)
+function D⁰(ϕ,I,dim,h=step(ϕ,dim))
     Im   = decrement_index(I,dim)
     Ip   = increment_index(I,dim)
     return (ϕ[Ip] - ϕ[Im]) / (2h)
@@ -40,14 +39,12 @@ end
 Forward finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-@inline function D⁺(ϕ,I,dim)
-    h  = step(ϕ,dim)
+@inline function D⁺(ϕ,I,dim,h=step(ϕ,dim))
     Ip = increment_index(I,dim)
     return (ϕ[Ip] - ϕ[I]) / h
 end
 
-function D⁺⁺(ϕ,I,dim)
-    h    = step(ϕ,dim)
+function D⁺⁺(ϕ,I,dim,h=step(ϕ,dim))
     Ip   = increment_index(I,dim)
     Ipp  = increment_index(I,dim,2)
     return (-1.5*ϕ[I] + 2*ϕ[Ip] - 1/2*ϕ[Ipp]) / h
@@ -59,36 +56,34 @@ end
 Backward finite difference scheme for first order derivative at grid point `I`
 along dimension `dim`.
 """
-function D⁻(ϕ,I,dim)
-    h    = step(ϕ,dim)
+function D⁻(ϕ,I,dim,h=step(ϕ,dim))
     Im   = decrement_index(I,dim)
     return (ϕ[I] - ϕ[Im]) / h
 end
 
-function D⁻⁻(ϕ,I,dim)
-    h    = step(ϕ,dim)
+function D⁻⁻(ϕ,I,dim,h=step(ϕ,dim))
     Im   = decrement_index(I,dim)
     Imm   = decrement_index(I,dim,2)
     return (1.5*ϕ[I] - 2*ϕ[Im] + 1/2*ϕ[Imm]) / h
 end
 
 """
-    weno5⁻(ϕ,I,dim)
+    weno5⁻(ϕ,I,dim[, h])
 
 Fith-order weno derivative using the stencil `i-3,i-2,i-1,i,i+1,i+2`.
 """
-function weno5⁻(ϕ,I,dim)
+function weno5⁻(ϕ,I,dim,h=step(ϕ,dim))
     # see section 3.4 of Osher-Fedwik
     Im  = decrement_index(I,dim)
     Imm = decrement_index(Im,dim)
     Ip  = increment_index(I,dim)
     Ipp = increment_index(Ip,dim)
     # finite differences
-    v1  = D⁻(ϕ,Imm,dim)
-    v2  = D⁻(ϕ,Im,dim)
-    v3  = D⁻(ϕ,I,dim)
-    v4  = D⁻(ϕ,Ip,dim)
-    v5  = D⁻(ϕ,Ipp,dim)
+    v1  = D⁻(ϕ,Imm,dim,h)
+    v2  = D⁻(ϕ,Im,dim,h)
+    v3  = D⁻(ϕ,I,dim,h)
+    v4  = D⁻(ϕ,Ip,dim,h)
+    v5  = D⁻(ϕ,Ipp,dim,h)
     # third-order estimates
     dϕ1 =  (1/3)*v1 - (7/6)*v2 + (11/6)*v3
     dϕ2 = -(1/6)*v2 + (5/6)*v3 + (1/3)*v4
@@ -111,22 +106,22 @@ function weno5⁻(ϕ,I,dim)
 end
 
 """
-    weno5⁺(ϕ,I,dim)
+    weno5⁺(ϕ,I,dim[,h])
 
 Fith-order weno derivative using the stencil `i-2,i-1,i,i+1,i+2,i+3`.
 """
-function weno5⁺(ϕ,I,dim)
+function weno5⁺(ϕ,I,dim,h=step(ϕ,dim))
     # see section 3.4 of Osher-Fedwik
     Im  = decrement_index(I,dim)
     Imm = decrement_index(Im,dim)
     Ip  = increment_index(I,dim)
     Ipp = increment_index(Ip,dim)
     # finite differences
-    v1  = D⁺(ϕ,Ipp,dim)
-    v2  = D⁺(ϕ,Ip,dim)
-    v3  = D⁺(ϕ,I,dim)
-    v4  = D⁺(ϕ,Im,dim)
-    v5  = D⁺(ϕ,Imm,dim)
+    v1  = D⁺(ϕ,Ipp,dim,h)
+    v2  = D⁺(ϕ,Ip,dim,h)
+    v3  = D⁺(ϕ,I,dim,h)
+    v4  = D⁺(ϕ,Im,dim,h)
+    v5  = D⁺(ϕ,Imm,dim,h)
     # third-order estimates
     dϕ1 =  (1/3)*v1 - (7/6)*v2 + (11/6)*v3
     dϕ2 = -(1/6)*v2 + (5/6)*v3 + (1/3)*v4
@@ -149,13 +144,12 @@ function weno5⁺(ϕ,I,dim)
 end
 
 """
-    D2⁰(ϕ,I,dim)
+    D2⁰(ϕ,I,dim[, h])
 
 Centered finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁰(ϕ,I,dim)
-    h    = step(ϕ,dim)
+function D2⁰(ϕ,I,dim,h=step(ϕ,dim))
     Im   = decrement_index(I,dim)
     Ip   = increment_index(I,dim)
     return (ϕ[Ip] - 2ϕ[I] + ϕ[Im]) / h^2
@@ -170,7 +164,7 @@ along the dimensions `dims`.
 If `dims[1] == dims[2]`, it is more efficient to call `D2⁰(ϕ,I,dims[1])`.
 """
 function D2(ϕ,I,dims)
-    h  = step(ϕ)
+    h = map(d->step(ϕ,d),dims)
     Ip = increment_index(I,dims[1])
     Im = decrement_index(I,dims[1])
     (D⁰(ϕ,Ip,dims[2]) - D⁰(ϕ,Im,dims[2]))/(2*h[dims[1]])
@@ -182,8 +176,7 @@ end
 Upward finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁺⁺(ϕ,I,dim)
-    h    = step(ϕ,dim)
+function D2⁺⁺(ϕ,I,dim,h=step(ϕ,dim))
     Ip   = increment_index(I,dim,1)
     Ipp  = increment_index(I,dim,2)
     return (ϕ[I] - 2ϕ[Ip] + ϕ[Ipp]) / h^2
@@ -195,8 +188,7 @@ end
 Backward finite difference scheme for second order derivative at grid point `I`
 along dimension `dim`. E.g. if `dim=1`, this approximates `∂ₓₓ`.
 """
-function D2⁻⁻(ϕ,I,dim)
-    h    = step(ϕ,dim)
+function D2⁻⁻(ϕ,I,dim,h=step(ϕ,dim))
     Im   = decrement_index(I,dim,1)
     Imm  = decrement_index(I,dim,2)
     return (ϕ[Imm] - 2ϕ[Im] + ϕ[I]) / h^2

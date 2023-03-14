@@ -1,9 +1,9 @@
 """
     struct CartesianGridFunction{N,T,V}
 
-A function `f : ℝᴺ → V` defined by discrete values on the nodes of a
-`UniformCartesianMesh`. The `order` parameter specifies the polynomial order of
-the interpolation scheme.
+A piecewise-polynomial function `p : ℝᴺ → V` defined by discrete values on the
+nodes of a `UniformCartesianMesh`. The `order` parameter specifies the
+polynomial order of the interpolation scheme.
 """
 struct CartesianGridFunction{N,T,V}
     vals::Array{V,N}
@@ -14,11 +14,27 @@ end
 
 mesh(f::CartesianGridFunction) = f.els_mesh
 vals(f::CartesianGridFunction) = f.vals
-meshsize(f::CartesianGridFunction, args...) = step(mesh(f), args...)
+vals_mesh(f::CartesianGridFunction) = f.vals_mesh
 ambient_dimension(f::CartesianGridFunction{N}) where {N} = N
+
+Base.size(f::CartesianGridFunction) = size(vals(f))
+Base.getindex(f::CartesianGridFunction, args...) = getindex(vals(f), args...)
+Base.setindex!(f::CartesianGridFunction, v, args...) = setindex!(vals(f), v, args...)
+
+Base.step(f::CartesianGridFunction) = step(vals_mesh(f))
+Base.step(f::CartesianGridFunction,dim) = step(vals_mesh(f),dim)
 
 domain(f::CartesianGridFunction) = domain(mesh(f))
 
+"""
+    CartesianGridFunction(f::Function, U::HyperRectangle{N,T}; meshsize,
+    order=1)
+
+Project the function `f` on a `UniformCartesianGrid` of `U` with meshsize given
+by `meshsize`. The `order` parameter specifies the polynomial order of the
+interpolation scheme for reconstructing a continuous function from the grid
+values.
+"""
 function CartesianGridFunction(f::Function, U::HyperRectangle{N,T}; meshsize,
                                order=1) where {N,T}
     els_mesh = UniformCartesianMesh(U; step=meshsize)
@@ -66,4 +82,12 @@ function bernstein_interpolants(f::CartesianGridFunction{N,T,V}) where {N,T,V}
     vandermond = bernstein_interpolation_matrix(f)
     els = ElementIterator(f.els_mesh)
     return (bernstein_interpolant(f, I, vandermond) for I in CartesianIndices(els))
+end
+
+element_index_for_point(x::SVector{N}, f::CartesianGridFunction{N}) where {N} = element_index_for_point(x, mesh(f))
+
+function curvature(f::CartesianGridFunction{N,T,V}, x::SVector{N}) where {N,T,V}
+    I = element_index_for_point(x, f)
+    p = bernstein_interpolant(f, I)
+    return curvature(p, x)
 end

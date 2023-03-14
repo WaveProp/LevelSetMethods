@@ -1,35 +1,34 @@
 using Test
-using LevelSetMethods
 using LinearAlgebra
+using StaticArrays
 using Plots
 
-nx,ny = 100,100
-x     = LinRange(-1,1,nx)
-y     = LinRange(-1,1,ny)
-hx,hy = step(x),step(y)
-grid  = UniformCartesianMesh(x,y)
-bc    = PeriodicBC(2)
-ϕ     = LevelSet(grid,bc) do (x,y)
-    1.0
-end
-add_circle!(ϕ, SVector(0.,0.), .9)
-remove_rectangle!(ϕ, SVector(0.,0.5), SVector(.5, 1.0))
-# modify the level set function such that it is no longer
-# a signed distance function
-modifier = NodeField(grid) do (x,y)
-    cos(x*4)*sin(y*4)
-end
-@. ϕ.vals = min(ϕ.vals,.5)^3.0*(abs(modifier.vals)+.01)
+import WavePropBase as WPB
+import LevelSetMethods as LSM
 
-term1  = ReinitializationTerm()
-terms  = (term1,)
-b = zero(ϕ)
-integrator = ForwardEuler()
-eq = LevelSetEquation(;terms,integrator,state=ϕ,t=0,buffer=b)
+WPB.clear_entities!()
+nx,ny = 200,200
+rec   = WPB.HyperRectangle((-3,-3),(3.,3.))
+ϕ     = LSM.CartesianGridFunction((x) -> sqrt(x[1]^2 + x[2]^2) - 1, rec; meshsize=0.1)
+bc    = LSM.NeumannBC(3)
+Γ     = LSM.LevelSet(ϕ,0)
+term1 = LSM.ReinitializationTerm()
+terms = (term1,)
+integrator = LSM.ForwardEuler()
+eq = LSM.LevelSetEquation(;terms,integrator,levelset=Γ,t=0,cfl=0.05,boundary_condition=bc)
 
-# comparison between the level set before and after reinitialization
-# heatmap(eq,title="Before")
-# plot!(eq,color=:black,colorbar=true)
-integrate!(eq,1.0)
-heatmap(eq,title="After")
+fig = heatmap(eq,colorbar=true)
 plot!(eq,color=:black,colorbar=true)
+
+LSM.integrate!(eq,1)
+
+@show LSM.df_deviation(eq)
+
+# solve
+anim = @animate for n ∈ 0:100
+    tf = 0.05*n
+    @show LSM.df_deviation(eq)
+    LSM.integrate!(eq,tf)
+    plot(eq)
+end
+gif(anim, "test.gif")
