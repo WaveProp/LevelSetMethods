@@ -3,15 +3,15 @@
     level-set by recursive subdivision and one-dimensional root-finding.
 =#
 
-function quadgen(ls::LevelSet; qorder=5, maxdepth=20, maxslope=10, curvature=false)
+function quadgen(ls::LevelSet; qorder=5, maxdepth=20, maxslope=10, curvature=false, merge=false)
     N = ambient_dimension(ls)
     M = geometric_dimension(ls)
     qrule1d = WPB.qrule_for_reference_shape(WPB.ReferenceLine(), qorder)
     nq = length(qrule1d()[2])^M
     qnodes = Vector{QuadratureNode{N,Float64}}()
-    p   = (;qrule1d,maxdepth,maxslope,qorder,curvature)
-    quadgen!(qnodes, ls, p)
-    return reshape(qnodes, nq, :)
+    p   = (;qrule1d,maxdepth,maxslope,qorder,curvature,merge)
+    qnodes, F = quadgen!(qnodes, ls, p)
+    return reshape(qnodes, nq, :), F
 end
 
 function quadgen!(qnodes, ls::LevelSet, p::NamedTuple)
@@ -20,8 +20,56 @@ function quadgen!(qnodes, ls::LevelSet, p::NamedTuple)
     w1d = [w[1] for w in w1d] |> Vector
     s = levelset_sign(ls)
     ϕ = levelset_function(ls)
+
+    if p.merge
+        # first loop: estimate the intersection volume in each Cartesian cell
+        interps = interpolants(ϕ)
+        volume = Dict{CartesianIndex, Float64}()
+        surf = s == 0
+        _p = (maxdepth=5,maxslope=10,qorder=3)
+        for (I, f) in interps
+            root = MultiBernsteinCell([f], [s])
+            _, W = _quadgen(root, surf, x1d, w1d, 0, _p)
+            volume[I] = sum(W)
+        end
+
+        # second loop: find the cells with small intersection volume and merge with biggest neighbor
+        F = Vector{BernsteinPolynomial}()
+        msh = mesh(ϕ); stp = step(msh); sz = size(msh); D = ambient_dimension(ϕ)
+        small_cell   = Set{CartesianIndex}()
+        if surf
+            threshold = prod(stp) / maximum(stp) / 2^(D+1)
+        end
+        for (I, v) in volume
+            0 < v < threshold && push!(small_cell, I)
+        end
+        treated_cell = Set{CartesianIndex}()
+        if surf
+            for I in small_cell
+                neighs = neighbors(I, sz, treated_cell)
+                neigh_vol = [volume[J] for J in neighs]
+                if isempty(neigh_vol)
+                    @warn "Some small cells can't be merged"
+                    push!(F, interpolant(ϕ, I))
+                    continue
+                end
+                J = neighs[argmax(neigh_vol)]
+                push!(treated_cell, I, J)
+                push!(F, merge_interpolant(ϕ, I, J))
+            end
+            for (I, _) in volume
+                if !(I in treated_cell || I in small_cell)
+                    push!(treated_cell, I)
+                    push!(F, interpolant(ϕ, I))
+                end
+            end
+        end
+    else
+        F = [interp[2] for interp in interpolants(ϕ)]
+    end
+
     # loop over the C∞ interpolants of `ls`
-    for f in bernstein_interpolants(ϕ)
+    for f in F
         root = MultiBernsteinCell([f], [s])
         surf = s == 0
         level = 0
@@ -33,7 +81,7 @@ function quadgen!(qnodes, ls::LevelSet, p::NamedTuple)
             push!(qnodes, QuadratureNode(x, w, n, κ))
         end
     end
-    return qnodes
+    return qnodes, F
 end
 
 function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {N,T}
@@ -73,40 +121,37 @@ function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {
         return nodes,weights
     end
 
-    # find a heigh direction such that all of ∇Ψ are (provably) bounded away
+    # find candidate heigh directions such that all of ∇Ψ are (provably) bounded away
     # from zero.
-    bnds    = map(∇Ψ) do ∇ψ
-        ntuple(d->bound(∇ψ[d],rec),D)
-    end
-    isvalid = ntuple(D) do dim
-        all(bnds) do bnd
-            (prod(bnd[dim])>0) &&
-            (sum(bd->maximum(abs,bd), bnd)/minimum(abs,bnd[dim]) < par.maxslope)
+    candidates = []
+    partial_bnds = [[bound(∇ψ[d],rec) for d in 1:D] for ∇ψ in ∇Ψ]
+    grad_l1_norm = [sum(x->maximum(abs.(x)), row) for row in partial_bnds]
+    for d in 1:D
+        cand = true
+        for j in 1:length(∇Ψ)
+            if prod(partial_bnds[j][d]) ≤ 0 || grad_l1_norm[j] ≥ minimum(abs.(partial_bnds[j][d]))*par.maxslope
+                cand = false; break
+            end
+        end
+        if cand
+            push!(candidates, d)
         end
     end
-    if !any(isvalid) # no valid direction so split
+    if isempty(candidates) # no valid direction so split
         Ω1,Ω2 = split(Ω)
         X1, W1 = _quadgen(Ω1, surf, x1d, w1d, level+1, par)
         X2, W2 = _quadgen(Ω2, surf, x1d, w1d, level+1, par)
         return (append!(X1, X2), append!(W1, W2))
     end
 
-    # If there is a valid direction, we go down on it. Choose the direction which
-    # is the least steep overall by maximizing the minimum of the derivative on
+    # If there is a valid direction, we go down on it. Choose the direction with
+    # the least steep overall by maximizing the minimum of the derivative on
     # direction k over all functions
-    ∇Ψc = map(∇Ψ) do ∇ψ
-        ntuple(D) do d
-            ∇ψc = abs.(∇ψ[d](xc))
-            ∇ψc/norm(∇ψc)
-        end
-    end
-    k = argmax(1:D) do dim
-        if isvalid[dim]
-            minimum(∇ψc -> abs(∇ψc[dim]),∇Ψc)
-        else
-            -Inf
-        end
-    end
+    partial_midvals  = [[abs(∇ψ[i](xc)) for i in 1:D] for ∇ψ in ∇Ψ]
+    grad_l1_norm_mid = [sum(row) for row in partial_midvals]
+    score = [sum(j->partial_midvals[j][i]/grad_l1_norm_mid[j], 1:length(∇Ψ)) for i in candidates]
+    k = candidates[argmax(score)]
+
     Ω̃  = restrict(Ω,k,surf) # the D-1 dimensional domain
     X, W = _quadgen(Ω̃, false, x1d, w1d, level, par)
     nodes = Vector{SVector{D,T}}()
@@ -138,11 +183,15 @@ function _quadgen(Ω::MultiBernsteinCell{N,T},surf,x1d, w1d, level, par) where {
     return nodes, weights
 end
 
-function dim1quad(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U, x1d, w1d, multi_zeros=true)
+function dim1quad(Ψ::Vector{<:Function}, signs::Vector{<:Integer}, L, U, x1d, w1d, multi_zeros=true;tol=10^(-12))
     roots = [L, U]
     if multi_zeros
         for ψ in Ψ
-            union!(roots, find_zeros(ψ, L, U))
+            for z in find_zeros(ψ, L, U)
+                if all(r->abs(r-z)>tol, roots)
+                    push!(roots, z)
+                end
+            end
         end
     else
         for ψ in Ψ
@@ -185,7 +234,7 @@ end
 
 function NystromMesh(ls::LevelSet;kwargs...)
     N = ambient_dimension(ls)
-    qnodes = quadgen(ls;kwargs...)
+    qnodes, F = quadgen(ls;kwargs...)
     nq,nel = size(qnodes)
     etype2qtags = Dict{DataType,Matrix{Int}}(Nothing => reshape(1:length(qnodes),nq,:))
     return NystromMesh{N,Float64}(;qnodes=vec(qnodes),etype2qtags)

@@ -1,6 +1,6 @@
 using Test
 using LevelSetMethods
-using LevelSetMethods: CartesianGridFunction, bernstein_interpolant
+using LevelSetMethods: CartesianGridFunction, interpolant, merge_interpolant
 import WavePropBase as WPB
 
 for dim in 2:3
@@ -14,12 +14,21 @@ for dim in 2:3
         for order in 1:3
             F = CartesianGridFunction(f,box;meshsize,order)
             I = CartesianIndex(ntuple(i->i+1,dim))
-            p = bernstein_interpolant(F,I)
-            U = WPB.domain(p)
-            xt = U(ntuple(i->rand(),dim))
-            @testset "test function of order $k, dim $dim, interp order $order" begin
-                order < k ? (@test p(xt) ≉ f(xt)) : (@test p(xt) ≈ f(xt))
+            # p = interpolant(F, I)
+            # U = WPB.domain(p)
+            # xt = U(ntuple(i->rand(),dim))
+            # @testset "test function of order $k, dim $dim, interp order $order" begin
+            #     order < k ? (@test p(xt) ≉ f(xt)) : (@test p(xt) ≈ f(xt))
+            # end
+            for J in LevelSetMethods.neighbors(I, size(mesh(F)))
+                p = merge_interpolant(F, I, J)
+                U = WPB.domain(p)
+                xt = U(ntuple(i->rand(),dim))
+                @testset "test merge of order $k, dim $dim, interp order $order" begin
+                    order < k ? (@test p(xt) ≉ f(xt)) : (@test p(xt) ≈ f(xt))
+                end
             end
+           
         end
     end
 end

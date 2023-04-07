@@ -66,3 +66,18 @@ function my_find_zero(f,(l,u))
         return nothing
     end
 end
+
+function neighbors(I::CartesianIndex{D}, size::NTuple{D}, occupied=Set{CartesianIndex{D}}()) where {D}
+    N = Vector{CartesianIndex{D}}()
+    for d in 1:D
+        if I[d] > 1
+            J = CartesianIndex(ntuple(i->i == d ? I[i]-1 : I[i], D))
+            !(J in occupied) && push!(N, J)
+        end
+        if I[d] < size[d]
+            J = CartesianIndex(ntuple(i->i == d ? I[i]+1 : I[i], D))
+            !(J in occupied) && push!(N, J)
+        end
+    end
+    return N
+end
